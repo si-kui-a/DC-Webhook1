@@ -1,0 +1,14 @@
+.env
+data.db
+__pycache__/
+*.pyc
+venv/
+
+# PII 明碼版本禁止進版控，只有 .enc 加密版本可以進
+academic_progress.md
+my_resume.json
+
+logs/*.log
+
+# old scaffold kept for reference only, never committed
+_scaffold_backup/

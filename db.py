@@ -94,6 +94,17 @@ def mark_seeded_historical(item_id: str):
     conn.close()
 
 
+def update_summary(item_id: str, summary: str):
+    """摘要是在 insert_item_if_new() 之後才算出來的（cbc 直接用 RSS
+    description，fed/tsmc 需要多發一次 detail 頁請求），先用 summary=None
+    insert，算出來後再補寫回去，避免對「首次執行安全閘門」擋下、根本不會
+    被推播的項目也白白花算力做摘要。"""
+    conn = get_conn()
+    conn.execute("UPDATE item SET summary=? WHERE item_id=?", (summary, item_id))
+    conn.commit()
+    conn.close()
+
+
 def log_delivery(item_id: str | None, channel: str, http_status: int | None, error_message: str | None = None):
     conn = get_conn()
     conn.execute(

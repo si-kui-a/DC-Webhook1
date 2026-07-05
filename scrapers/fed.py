@@ -51,3 +51,26 @@ def fetch() -> list[dict]:
             "published_at": time_el.get_text(strip=True),
         })
     return results
+
+
+def fetch_detail_text(url: str) -> str:
+    """抓單則新聞稿詳情頁的正文全文（供摘要用）。
+
+    已驗證的結構（curl 實測 monetary20260617a.htm）：#article 底下有兩個
+    class 都是 "col-xs-12 col-sm-8 col-md-8" 的 div，第一個多帶一個
+    "heading" class（標題/分享按鈕，不是正文），第二個才是真正的內文
+    <p> 段落。用 :not(.heading) 排除第一個，避免抓到分享連結、社群按鈕
+    等雜訊文字混進摘要。
+    """
+    resp = requests.get(url, headers=HEADERS, timeout=15)
+    resp.raise_for_status()
+    soup = BeautifulSoup(resp.text, "html.parser")
+
+    article = soup.select_one("#article")
+    if not article:
+        return ""
+    body_div = article.select_one("div.col-xs-12.col-sm-8.col-md-8:not(.heading)")
+    if not body_div:
+        return ""
+    paragraphs = body_div.find_all("p")
+    return " ".join(p.get_text(strip=True) for p in paragraphs)

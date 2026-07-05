@@ -3,3 +3,14 @@ beautifulsoup4>=4.12
 python-dotenv>=1.0
 cryptography>=42.0
 truststore>=0.9
+
+# 本地摘要功能（抽取式演算法，非LLM，無雲端API）：
+# cbc（中文）用 textrank4zh；fed/tsmc（英文）用 sumy LexRank
+jieba>=0.42
+sumy>=0.12
+nltk>=3.9
+textrank4zh>=0.3
+# sumy LexRank 與 textrank4zh 的硬依賴，非直接呼叫但缺一不可
+numpy>=2.0
+scipy>=1.14
+networkx>=3.0

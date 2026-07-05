@@ -22,6 +22,8 @@ truststore.inject_into_ssl()  # 修 certifi 對某些政府網站(如 cbc.gov.tw
 from dotenv import load_dotenv
 
 import db
+import summarizer_en
+import summarizer_zh
 from push_webhook import build_embed, send_webhook
 from scrapers import tsmc, fed, cbc, etf0050
 
@@ -65,6 +67,34 @@ FAIL_THRESHOLD = 3
 FIRST_RUN_PUSH_CAP = {
     "cbc": 5,
 }
+
+# 詳情頁抓取函式，只有 fed/tsmc 需要（cbc 直接用 RSS description，
+# etf0050 尚未實作）。
+DETAIL_FETCHERS = {
+    "fed": fed.fetch_detail_text,
+    "tsmc": tsmc.fetch_detail_text,
+}
+
+
+def compute_summary(key: str, raw: dict) -> str | None:
+    """依來源語言/資料型態選擇對應摘要策略。任何一步失敗（detail 頁
+    403/超時、selector 抓空、摘要套件例外）都回傳 None，讓呼叫端沿用
+    「無摘要」的既有邏輯，不能讓單一 item 的摘要失敗中斷整個來源的
+    推播流程。"""
+    try:
+        if key == "cbc":
+            raw_description = raw.get("raw_description")
+            return summarizer_zh.summarize(raw_description, title=raw.get("title")) if raw_description else None
+
+        fetch_detail = DETAIL_FETCHERS.get(key)
+        if fetch_detail:
+            detail_text = fetch_detail(raw["url"])
+            return summarizer_en.summarize(detail_text)
+    except Exception as e:
+        logger.warning(f"[{key}] 摘要產生失敗（{raw.get('url')}）：{e}")
+        return None
+
+    return None
 
 
 def _record_summary(key: str, how: str, result: str):
@@ -138,6 +168,15 @@ def run_source(key: str):
             db.mark_seeded_historical(item["item_id"])
             archived_only_count += 1
             continue
+
+        # 只對「真的會被推播」的項目算摘要——首次執行安全閘門擋下的歷史
+        # 項目不需要，省下 fed/tsmc 額外的 detail 頁請求與 cbc 的 TextRank
+        # 運算。summary 一開始是 None（insert 時就是這樣），這裡算出來後
+        # 才補寫回 db，讓 db 裡存的內容跟實際推播出去的一致。
+        summary = compute_summary(key, raw)
+        if summary:
+            db.update_summary(item["item_id"], summary)
+            item["summary"] = summary
 
         embed = build_embed(
             title=item["title"],

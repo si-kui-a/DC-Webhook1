@@ -50,6 +50,7 @@ fi
 #    intel-pusher 目前沒有 PII_FILES（見 encrypt_backup.py），所以沒有
 #    對應的 .enc 檔案要加；等這個專案真的產生個資檔案時再加進來。
 git add scrapers/ main.py db.py push_webhook.py encrypt_backup.py schema.sql \
+        summarizer_zh.py summarizer_en.py \
         README.md requirements.txt crontab.example backup.sh \
         .gitignore .env.example Meta_Dev_Knowledge.md Meta_User_Feedback.md 2>/dev/null || true
 

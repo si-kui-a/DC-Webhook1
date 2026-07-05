@@ -40,6 +40,10 @@ def fetch() -> list[dict]:
         results.append({
             "title": (item.findtext("title") or "").strip(),
             "summary": None,
+            # RSS description 是原始 HTML（含 <p>/<table> 等標籤），交給
+            # summarizer_zh.summarize() 自己清洗+摘要，這裡不先處理，
+            # 保持 fetch() 只負責「抓資料」，不做摘要邏輯。
+            "raw_description": item.findtext("description") or "",
             "url": link,
             "published_at": (item.findtext("pubDate") or "").strip(),
         })

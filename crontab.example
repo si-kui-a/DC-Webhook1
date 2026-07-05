@@ -1,0 +1,10 @@
+# crontab -e 貼入以下內容（依實際路徑與 python 虛擬環境調整）
+# 週報頻率：每週一早上 8:00 跑全部 4 個核心來源
+0 8 * * 1 cd /opt/intel-pusher && /opt/intel-pusher/venv/bin/python main.py --source all >> /opt/intel-pusher/logs/cron.log 2>&1
+
+# Fed 有 FOMC 會議時效性較高，額外在每個工作日早上跑一次，
+# 去重機制會確保沒有新公告時不會重複推播
+0 9 * * 1-5 cd /opt/intel-pusher && /opt/intel-pusher/venv/bin/python main.py --source fed >> /opt/intel-pusher/logs/cron.log 2>&1
+
+# GitHub 自動備份：每日凌晨 3 點執行（加密 PII + commit + push）
+0 3 * * * /opt/intel-pusher/backup.sh >> /opt/intel-pusher/logs/backup.log 2>&1

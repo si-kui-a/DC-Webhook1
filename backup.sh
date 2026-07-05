@@ -7,11 +7,24 @@
 #   2. 已設定 fine-grained PAT 或 SSH deploy key，且僅有該倉庫的 push 權限
 #
 # 建議排程：crontab 每日凌晨執行一次，見 crontab.example
+#
+# 兩份 log 用途明確分離（依 git push 的 exit code 判斷，不是看有沒有輸出內容——
+# git push 成功時也會把 ref 更新資訊寫到 stderr，用「有沒有輸出」判斷會誤把
+# 正常訊息當成錯誤）：
+#   logs/backup.log        每次執行都會有一行摘要（成功或失敗都記）
+#   logs/backup_errors.log 只有真正失敗時才會有內容；空檔案 = 從未失敗過
 
 set -e
 cd "$(dirname "$0")"
 
-echo "[$(date '+%Y-%m-%d %H:%M:%S')] 開始備份"
+LOG_DIR="logs"
+BACKUP_LOG="$LOG_DIR/backup.log"
+ERROR_LOG="$LOG_DIR/backup_errors.log"
+mkdir -p "$LOG_DIR"
+
+ts() { date '+%Y-%m-%d %H:%M:%S'; }
+
+echo "[$(ts)] 開始備份" >> "$BACKUP_LOG"
 
 # 1. 加密含 PII 的檔案（產生/更新 .enc）
 # 用專案 venv 的 python，不要用系統 python3——cryptography 只裝在 venv 裡，
@@ -27,12 +40,25 @@ git add scrapers/ main.py db.py push_webhook.py encrypt_backup.py schema.sql \
         README.md requirements.txt crontab.example backup.sh \
         .gitignore .env.example Meta_Dev_Knowledge.md 2>/dev/null || true
 
-# 3. 若無變更，git commit 會失敗，用 || true 避免中斷腳本（不視為錯誤）
-git commit -m "auto backup $(date '+%Y-%m-%d %H:%M')" --allow-empty-message 2>/dev/null || true
+# 3. 若沒有變更，git commit 會因為「nothing to commit」而失敗（不是產生空
+#    commit），用 || true 避免中斷腳本；--allow-empty-message 只是允許空白
+#    的 commit「訊息」，跟允許空白「變更」是兩回事，這裡刻意不加
+#    --allow-empty，所以沒有變更的日子不會產生無意義的空 commit。
+git commit -m "auto backup $(ts)" --allow-empty-message >/dev/null 2>&1 || true
 
-# 4. push；失敗不應中斷主要推播流程，只記錄
-if git push origin main 2>>logs/backup_errors.log; then
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] 備份完成並已推送"
+# 4. push；用 exit code 判斷成功/失敗，push 的完整輸出先存起來，
+#    只有失敗時才寫進 backup_errors.log。
+push_output="$(git push origin main 2>&1)"
+push_exit=$?
+commit_hash="$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
+
+if [ "$push_exit" -eq 0 ]; then
+    echo "[$(ts)] 成功，commit=$commit_hash" >> "$BACKUP_LOG"
+    echo "[$(ts)] 備份完成並已推送（commit=$commit_hash）"
 else
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] 備份 push 失敗，詳見 logs/backup_errors.log"
+    {
+        echo "[$(ts)] 失敗，commit=$commit_hash"
+        echo "$push_output"
+    } >> "$ERROR_LOG"
+    echo "[$(ts)] 備份 push 失敗（commit=$commit_hash），詳見 logs/backup_errors.log"
 fi

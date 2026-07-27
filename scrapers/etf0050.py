@@ -1,19 +1,11 @@
 """
 scrapers/etf0050.py — 元大台灣50（0050）持股比重。
 
-已驗證來源（直接 curl 確認，非搜尋推測）：
-- /product/detail/0050/newsAnnounce 與 /product/detail/0050/ratio 兩個路徑
-  curl 實測都只回傳「幾乎空殼」的 HTML（無 __NEXT_DATA__、無 <table>），
-  內容由前端 JS 在瀏覽器端動態載入，requests + BeautifulSoup 看不到。
-- 修復需要 headless browser（如 Playwright），屬架構升級，需核准後才動手，
-  見 README 已知限制，不自行加裝。
-
-原版在抓不到 <table> 時會回傳一筆 summary 為「（抓取失敗或頁面結構已變動，
-需人工核對）」的「假快照」item——main.py 會把它當成正常抓取結果寫入 db 並
-推播到 Discord，等於每次執行都對外送出一則沒有實際資訊的訊息。已改成在
-抓不到資料時直接 raise NotImplementedError，讓 main.py 走既有的例外處理
-路徑（計入 fail_count、連續失敗會發 critical log），跟其他尚未實作來源
-行為一致，不會偽裝成「有推播內容」。
+已驗證來源（2026-07-27 curl 實測確認）：
+- /product/detail/0050/ratio 頁面為 Nuxt.js SSR 渲染，資料不在 <table> 裡，
+  而是以 <div class="td" data-v-818b5120> 結構輸出，每個欄位依序為：
+  商品代碼 / 商品名稱 / 商品數量 / 商品權重，4 個 div 為一組。
+  用 BeautifulSoup 解析 div.td 即可取得完整持股清單，不需要 headless browser。
 """
 from datetime import date
 
@@ -29,27 +21,50 @@ HEADERS = {
 }
 
 
+def _is_stock_weight_label(label: str) -> bool:
+    """篩選出屬於股票權重表的欄位標籤，排除期貨等其他區段。"""
+    return label in ("商品代碼", "商品名稱", "商品數量", "商品權重")
+
+
 def fetch(top_n: int = 10) -> list[dict]:
     resp = requests.get(BASE_URL, headers=HEADERS, timeout=15)
     resp.raise_for_status()
     soup = BeautifulSoup(resp.text, "html.parser")
 
     rows = []
-    for tr in soup.select("table tr"):
-        cells = [td.get_text(strip=True) for td in tr.find_all("td")]
-        if len(cells) >= 4:
-            rows.append(cells)
+    # Nuxt SSR 結構：div.each_table > div.table > div.tbody > div.tr > div.td
+    # 每個 div.tr 包含 4 個 td：代碼/名稱/數量/權重
+    for tr in soup.select("div.tbody div.tr[data-v-818b5120]"):
+        cells = tr.select("div.td[data-v-818b5120]")
+        if len(cells) < 4:
+            continue
+        labels = [c.select_one("span:first-child").get_text(strip=True) for c in cells[:4]]
+        if not all(_is_stock_weight_label(l) for l in labels):
+            continue  # 不是股票權重表（例如期貨區段）跳過
+        values = [c.find_all("span")[-1].get_text(strip=True) for c in cells[:4]]
+        # 檢查權重欄位是否為合理百分比（0~100），且股票代碼為 4 位數
+        try:
+            w = float(values[3].replace("%", ""))
+            if w < 0 or w > 100:
+                continue
+            if not values[0].isdigit() or len(values[0]) != 4:
+                continue  # 排除期貨（TX/NYF 等非 4 位數字代碼）
+        except ValueError:
+            continue
+        rows.append((values[0], values[1], values[2], values[3]))
 
     if not rows:
-        raise NotImplementedError(
-            "etf0050 頁面為前端 JS 動態渲染（curl 已確認無 <table>），"
-            "requests+BeautifulSoup 抓不到資料。需要 Playwright 才能解決，"
-            "屬架構升級，待核准。見 README 已知限制。"
+        raise RuntimeError(
+            "抓取 0050 持股比重失敗：頁面結構可能已變動，"
+            "div.tbody div.tr 未找到股票權重資料"
         )
 
     top_holdings = rows[:top_n]
     today = date.today().isoformat()
-    summary = "\n".join(f"{r[1]}：{r[3]}%" for r in top_holdings if len(r) >= 4)
+    summary = "\n".join(
+        f"{r[1]}（{r[0]}）：{r[3]}%"
+        for r in top_holdings
+    )
 
     return [{
         "title": f"0050 持股比重快照（{today}）",

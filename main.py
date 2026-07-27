@@ -24,6 +24,7 @@ from dotenv import load_dotenv
 import db
 import summarizer_en
 import summarizer_zh
+import notify_telegram
 from push_webhook import build_embed, send_webhook
 from scrapers import tsmc, fed, cbc, etf0050
 
@@ -69,7 +70,7 @@ FIRST_RUN_PUSH_CAP = {
 }
 
 # 詳情頁抓取函式，只有 fed/tsmc 需要（cbc 直接用 RSS description，
-# etf0050 尚未實作）。
+# stockintelli (etf0050) 改為 RSC payload 嵌入式資料，不需要詳情頁）。
 DETAIL_FETCHERS = {
     "fed": fed.fetch_detail_text,
     "tsmc": tsmc.fetch_detail_text,
@@ -191,6 +192,13 @@ def run_source(key: str):
             db.mark_published(item["item_id"])
             pushed_count += 1
             logger.info(f"[{key}] 已推播：{item['title'][:40]}")
+            # 同步推送到 Telegram（與 finfeed 共用 bot token）
+            tg_text = (
+                f"*{item['title']}*\n"
+                f"{item.get('summary') or '（無摘要）'}\n\n"
+                f"🔗 {item['url']}"
+            )
+            notify_telegram.send_message(tg_text)
         else:
             logger.error(f"[{key}] 推播失敗（HTTP {status}）：{err}")
 

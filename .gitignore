@@ -9,6 +9,12 @@ academic_progress.md
 my_resume.json
 
 logs/*.log
+work/*.log
 
 # old scaffold kept for reference only, never committed
 _scaffold_backup/
+
+# legacy scholarship-monitor archive
+legacy/scholarship-monitor/.env
+legacy/scholarship-monitor/work/*.log
+legacy/scholarship-monitor/node_modules/

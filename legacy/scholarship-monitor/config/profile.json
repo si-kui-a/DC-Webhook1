@@ -1,0 +1,57 @@
+{
+  "country": "Taiwan",
+  "current_country": "Germany",
+  "degree": "Bachelor",
+  "major": "社會學系",
+  "_comment_major_aliases": "同一個科系的中英文/正式-口語寫法，供未來比對公告文字時做同義詞查找用；目前 ruleEngine 尚未接上任何以科系為條件的比對邏輯（既有的 exclude_keywords 已用「限理工/限醫學/限博士」這種反向排除清單間接處理科系不符的情況）",
+  "major_aliases": [
+    "社會學系",
+    "社會學",
+    "Sociology",
+    "Social Science",
+    "Social Sciences"
+  ],
+  "grade": "2",
+  "_comment_grade": "大二＝grade 2，寫法已一致，不需要另外轉換",
+  "gpa": 3.6,
+  "income_status": "normal",
+  "_comment_income_status": "[WHY] 用於硬性排除「限中低收入戶」「限清寒」類獎學金——使用者是一般家庭經濟狀況（非低收/中低收），這類獎學金即使其他條件都符合也不可能真的拿到，直接排除可避免看到用不到的項目",
+  "language": [
+    "Chinese",
+    "English",
+    "German B2"
+  ],
+  "residence_city": "台中市",
+  "_comment_residence_city": "戶籍地，用於硬性排除公告標題寫明「限OO市/縣設籍」但非台中市的項目",
+  "school": "東海大學",
+  "_comment_school": "就讀學校，用於硬性排除公告標題寫明「限OO大學學生」但非東海大學的項目",
+  "is_indigenous": false,
+  "_comment_is_indigenous": "是否具原住民身份，用於硬性排除公告標題限定原住民身份的項目",
+  "is_overseas_student": false,
+  "_comment_is_overseas_student": "是否為僑生身份（僑委會定義的旅外僑胞學生），用於硬性排除公告標題限定僑生身份的項目",
+  "is_refugee": false,
+  "_comment_is_refugee": "是否具難民身份，用於硬性排除公告標題限定難民身份的項目（本輪新增，SCAN 自 DAAD/EFG 語料實測發現真實案例：Scholarship for Students With Refugee Status 等）",
+  "is_disability_or_illness": false,
+  "_comment_is_disability_or_illness": "是否具身心障礙/特定疾病身份，用於硬性排除公告標題限定此類身份的項目（本輪新增，SCAN 自 457 筆真實標題實測發現真實案例：罕見疾病獎助學金、視障學生助學金、限癌症患者本人或親屬之獎助學金）",
+  "is_new_resident": false,
+  "_comment_is_new_resident": "是否為新住民（東南亞/大陸籍配偶及其子女的行政認定身份）或其子女，用於硬性排除公告標題限定新住民身份的項目（本輪新增，SCAN 修復 school_restricted 誤放問題時發現，THU 語料實測 2 筆真實案例：新住民及其子女培力與獎助學金、新應材新住民子女獎學金計畫）",
+  "_comment_exclude_keywords": "第一層過濾：命中即直接剔除（不計分、不進 AI）。「限理工/限醫學/限博士/限德籍/限研究所」是既有的科系/學制大類反向排除清單；「體育/美術系/國貿系/會計系」（本輪新增）是從 THU 語料實測發現的具體科系限定獎學金抽出的科系關鍵字，跟前五項同屬科系不符的排除邏輯，只是抓取粒度更細（具體系所名稱而非學門大類）；「中國工程師學會-莫衡先生紀念獎學金」「全國台南一中校友總會-母校畢業校友現就讀各大學系所獎助學金」（本輪新增）是不屬於學校/科系/身份別任何一類的個案排除（分別是特定專業學會會員資格限定、特定高中校友身份限定），比照既有「憑標題全文個案排除」的用法收錄",
+  "exclude_keywords": [
+    "限理工",
+    "限醫學",
+    "限博士",
+    "限德籍",
+    "限研究所",
+    "體育",
+    "美術系",
+    "國貿系",
+    "會計系",
+    "中國工程師學會-莫衡先生紀念獎學金",
+    "全國台南一中校友總會-母校畢業校友現就讀各大學系所獎助學金"
+  ],
+  "_comment_ai_fallback_threshold": "第二層結構化比對後，match_score 落在此區間才觸發第三層 AI 判讀（原企劃書未定義此界線，此為修補）",
+  "ai_fallback_score_range": [
+    0.35,
+    0.65
+  ]
+}

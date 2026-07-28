@@ -1,0 +1,38 @@
+{
+  "_version": "1.0.0",
+  "_comment": "獎學金多語言排除詞彙字典。從 scholarship-monitor config/exclude_terms.json 移植。\n分類結構保持一致以利未來雙向同步。",
+  "income_restricted": {
+    "_comment": "低收入/清寒限定 — 使用者 profile.income_status 不符時排除",
+    "title_keywords": {
+      "zh": ["低收入戶", "中低收入戶", "清寒"]
+    },
+    "qualifying_profile_values": ["low", "lower-middle", "低收入", "中低收入"]
+  },
+  "special_status": {
+    "indigenous": { "zh": ["原住民"] },
+    "overseas_student": { "zh": ["僑生"] },
+    "refugee": { "en": ["refugee"] },
+    "disability_illness": { "zh": ["罕見疾病", "視障", "癌症", "身心障礙", "身障", "重大傷病", "特殊疾病"] },
+    "new_resident": { "zh": ["新住民"] }
+  },
+  "nationality_restricted": {
+    "taiwan_aliases": { "zh": ["台灣", "臺灣", "中華民國"] },
+    "demonym_restricted": {
+      "en": ["Greeks", "Hellenes"],
+      "zh": ["工程師"]
+    }
+  },
+  "school_restricted": {
+    "name_suffix": { "zh": ["大學", "學院", "哲學系", "美術系", "會計系"] }
+  },
+  "grade_restricted": {
+    "graduate_only": {
+      "zh": ["博士生", "研究生", "碩士"],
+      "en_regex": ["\\bphd\\b", "\\bmaster(?:'|\\u2019)?s?\\b", "\\bdoctoral\\b", "\\bpostdoc(?:toral)?\\b"],
+      "de_regex_case_sensitive": ["\\bPromotion\\b"]
+    },
+    "upperclass_only": { "zh": ["限大三", "限大四"] },
+    "freshman_only": { "zh": ["新生入學", "新生獎勵", "優秀新生"] }
+  },
+  "residence_restricted": {}
+}

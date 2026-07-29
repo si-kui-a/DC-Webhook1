@@ -52,7 +52,16 @@ SERIES = {
     "credit_spread": ("BAMLH0A0HYM2", "高收益債信用利差(OAS)", "%"),
     "nasdaq": ("NASDAQCOM", "那斯達克綜合指數", ""),
     "sox": ("NASDAQSOX", "費城半導體指數(費半)", ""),
+    "wti": ("DCOILWTICO", "WTI原油價格", "美元/桶"),
 }
+# 純顯示,不套用_check_alert警報邏輯(使用者未指定閾值,避免亂猜門檻)。
+DISPLAY_ONLY_SERIES = {"wti"}
+
+# 融資融券餘額(TWSE官方MI_MARGN,全市場整體統計,非個股/個人維持率——
+# 維持率本質是帳戶層級依擔保品試算的比率,沒有公開的市場彙總版本，這裡
+# 用整體融資餘額趨勢當替代參考指標,已與使用者說明)。純顯示,同樣不套用
+# 警報邏輯。
+MARGIN_URL = "https://www.twse.com.tw/rwd/zh/marginTrading/MI_MARGN?response=json&date={date}&selectType=ALL"
 
 # 觸發警報時額外推播到獨立的「總經異常警報」頻道(main.py的run_source()
 # 讀取item的secondary_webhook_env欄位決定)，跟每日固定的「總經指標追蹤」
@@ -116,7 +125,34 @@ def _check_alert(key: str, latest: float, change: float, rows: list[tuple[str, f
             if change < 0 and prev_change < 0:
                 return True
         return False
-    return False
+    return False  # DISPLAY_ONLY_SERIES(如wti)一律落到這裡,恆回傳False
+
+
+def _fetch_margin_balance(date_str: str) -> dict | None:
+    """抓取融資融券餘額(TWSE官方MI_MARGN),回傳{融資餘額(仟元),融資餘額
+    變動(仟元)}。非交易日/抓取失敗回傳None,不影響其餘總經指標照常顯示。"""
+    url = MARGIN_URL.format(date=date_str)
+    try:
+        resp = requests.get(url, headers=HEADERS, timeout=15)
+        resp.raise_for_status()
+        data = resp.json()
+    except (requests.RequestException, ValueError):
+        return None
+    if data.get("stat") != "OK":
+        return None
+
+    # fields: ["項目","買進","賣出","現金(券)償還","前日餘額","今日餘額"]
+    # 索引4=前日餘額、5=今日餘額(先前版本誤用index 3/4,已修正並實測驗證)。
+    for table in data.get("tables", []):
+        for row in table.get("data", []):
+            if row[0] == "融資金額(仟元)":
+                try:
+                    prev_bal = int(row[4].replace(",", ""))
+                    today_bal = int(row[5].replace(",", ""))
+                    return {"balance": today_bal, "change": today_bal - prev_bal}
+                except (ValueError, IndexError):
+                    return None
+    return None
 
 
 def _fetch_liquidity() -> dict | None:
@@ -242,6 +278,15 @@ def fetch() -> list[dict]:
             f"{liquidity['net_liquidity_change_pct']:+.1f}%(週變動)**"
         )
         lines.append(f"- 📝 {liquidity['conclusion']}")
+
+    margin = _fetch_margin_balance(today.replace("-", ""))
+    if margin:
+        arrow = "🔺" if margin["change"] > 0 else ("🔻" if margin["change"] < 0 else "▪")
+        lines.append("")
+        lines.append(
+            f"- 融資餘額（全市場）：{margin['balance'] / 1000:.0f}百萬元 "
+            f"{arrow}{margin['change'] / 1000:+,.0f}百萬元（僅供參考,非個股/個人維持率）"
+        )
 
     report = f"= 總經指標追蹤（{today}）=\n\n" + "\n".join(lines)
 

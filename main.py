@@ -251,9 +251,14 @@ def run_source(key: str):
             # key)；macro_fred會依閥值判斷結果明確設True/False,只有觸發閥值
             # 才同步Telegram,避免每日固定推送的Discord訊息連帶洗版Telegram。
             if raw.get("telegram_alert", True):
+                # 部分來源(如etf0050)Telegram只想推「重點/警示」而非完整
+                # Discord報告內容(完整版本篇幅太長，Telegram該是快速通知
+                # 不是取代Discord)，用raw裡的telegram_summary覆蓋預設的
+                # 完整summary；沒設這個欄位的既有來源(fed/scholarship等)
+                # 行為不變,繼續用完整summary。
                 tg_text = notify_telegram.build_message(
                     title=item["title"],
-                    body=item.get("summary") or "（無摘要）",
+                    body=raw.get("telegram_summary") or item.get("summary") or "（無摘要）",
                     sentiment=sentiment,
                     sentiment_reason=sentiment_reason,
                     url=item["url"],

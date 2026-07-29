@@ -11,5 +11,9 @@
 # 每天自然產生新項目，不會因為跟每週all重疊而漏推或重複推。
 0 9 * * 1-5 cd /opt/intel-pusher && /opt/intel-pusher/venv/bin/python main.py --source macro_fred >> /opt/intel-pusher/logs/cron.log 2>&1
 
+# 美股送分題(Substack)發文沒有固定頻率，用每日檢查+去重確保當天有新文章
+# 就推、沒有就靜默跳過，不需要額外的時間判斷邏輯
+0 9 * * * cd /opt/intel-pusher && /opt/intel-pusher/venv/bin/python main.py --source substack_easypoint >> /opt/intel-pusher/logs/cron.log 2>&1
+
 # GitHub 自動備份：每日凌晨 3 點執行（加密 PII + commit + push）
 0 3 * * * /opt/intel-pusher/backup.sh >> /opt/intel-pusher/logs/backup.log 2>&1

@@ -7,6 +7,7 @@ main.py — 主執行入口。
     python main.py --source cbc
     python main.py --source etf0050
     python main.py --source macro_fred
+    python main.py --source substack_easypoint
     python main.py --source all
 
 cron 排程範例見 crontab.example。
@@ -29,7 +30,7 @@ import summarizer_en
 import summarizer_zh
 import notify_telegram
 from push_webhook import build_embed, send_webhook
-from scrapers import tsmc, fed, cbc, etf0050, macro_fred
+from scrapers import tsmc, fed, cbc, etf0050, macro_fred, substack_easypoint
 from scrapers import scholarship_daad, scholarship_moe, scholarship_thu, scholarship_efg
 from scrapers import scholarship_util
 
@@ -63,6 +64,8 @@ SOURCE_REGISTRY = {
     "cbc": (cbc.fetch, "WEBHOOK_INSTITUTIONAL_CBC", cbc.SOURCE_NAME, cbc.SOURCE_ID),
     "etf0050": (etf0050.fetch, "WEBHOOK_INSTITUTIONAL_0050", etf0050.SOURCE_NAME, etf0050.SOURCE_ID),
     "macro_fred": (macro_fred.fetch, "WEBHOOK_INSTITUTIONAL_MACRO", macro_fred.SOURCE_NAME, macro_fred.SOURCE_ID),
+    "substack_easypoint": (substack_easypoint.fetch, "WEBHOOK_ANALYST_EASYPOINT",
+                            substack_easypoint.SOURCE_NAME, substack_easypoint.SOURCE_ID),
 }
 
 # 獎學金來源（批次模式，共用一個 webhook URL，推播合併為一條訊息）
@@ -79,8 +82,11 @@ FAIL_THRESHOLD = 3
 # 首次執行安全閘門：只套用在 cbc（RSS 一次回傳全部歷史，curl 實測約500筆，
 # 資料庫是空的時候不能全部當「新項目」推播，否則洗版）。fed/tsmc 本來就是
 # 個位數筆數，沒有這個風險，故不列在這裡（值為 None 代表不套用閘門）。
+# substack_easypoint 一次回傳約20篇歷史文章，數量不像cbc的500筆那麼極端，
+# 但剛新開的DC頻道一次跳20則還是偏多，同樣套用閘門。
 FIRST_RUN_PUSH_CAP = {
     "cbc": 5,
+    "substack_easypoint": 5,
 }
 
 # 詳情頁抓取函式，只有 fed/tsmc 需要（cbc 直接用 RSS description，

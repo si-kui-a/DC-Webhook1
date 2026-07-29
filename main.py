@@ -6,6 +6,7 @@ main.py — 主執行入口。
     python main.py --source fed
     python main.py --source cbc
     python main.py --source etf0050
+    python main.py --source macro_fred
     python main.py --source all
 
 cron 排程範例見 crontab.example。
@@ -28,7 +29,7 @@ import summarizer_en
 import summarizer_zh
 import notify_telegram
 from push_webhook import build_embed, send_webhook
-from scrapers import tsmc, fed, cbc, etf0050
+from scrapers import tsmc, fed, cbc, etf0050, macro_fred
 from scrapers import scholarship_daad, scholarship_moe, scholarship_thu, scholarship_efg
 from scrapers import scholarship_util
 
@@ -61,6 +62,7 @@ SOURCE_REGISTRY = {
     "fed": (fed.fetch, "WEBHOOK_INSTITUTIONAL_FED", fed.SOURCE_NAME, fed.SOURCE_ID),
     "cbc": (cbc.fetch, "WEBHOOK_INSTITUTIONAL_CBC", cbc.SOURCE_NAME, cbc.SOURCE_ID),
     "etf0050": (etf0050.fetch, "WEBHOOK_INSTITUTIONAL_0050", etf0050.SOURCE_NAME, etf0050.SOURCE_ID),
+    "macro_fred": (macro_fred.fetch, "WEBHOOK_INSTITUTIONAL_MACRO", macro_fred.SOURCE_NAME, macro_fred.SOURCE_ID),
 }
 
 # 獎學金來源（批次模式，共用一個 webhook URL，推播合併為一條訊息）
@@ -228,15 +230,19 @@ def run_source(key: str):
             db.mark_published(item["item_id"])
             pushed_count += 1
             logger.info(f"[{key}] 已推播：{item['title'][:40]}")
-            # 同步推送到 Telegram（與 finfeed 共用 bot token）
-            sentiment_line = f"\nAI 情緒判斷：{sentiment}（{sentiment_reason}）\n" if sentiment else ""
-            tg_text = (
-                f"*{item['title']}*\n"
-                f"{item.get('summary') or '（無摘要）'}\n"
-                f"{sentiment_line}\n"
-                f"🔗 {item['url']}"
-            )
-            notify_telegram.send_message(tg_text)
+            # 同步推送到 Telegram（與 finfeed 共用 bot token）——預設一律推送
+            # (.get預設True,向下相容既有來源,它們的raw沒有telegram_alert這個
+            # key)；macro_fred會依閥值判斷結果明確設True/False,只有觸發閥值
+            # 才同步Telegram,避免每日固定推送的Discord訊息連帶洗版Telegram。
+            if raw.get("telegram_alert", True):
+                sentiment_line = f"\nAI 情緒判斷：{sentiment}（{sentiment_reason}）\n" if sentiment else ""
+                tg_text = (
+                    f"*{item['title']}*\n"
+                    f"{item.get('summary') or '（無摘要）'}\n"
+                    f"{sentiment_line}\n"
+                    f"🔗 {item['url']}"
+                )
+                notify_telegram.send_message(tg_text)
         else:
             logger.error(f"[{key}] 推播失敗（HTTP {status}）：{err}")
 

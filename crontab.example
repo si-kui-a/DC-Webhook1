@@ -6,5 +6,10 @@
 # 去重機制會確保沒有新公告時不會重複推播
 0 9 * * 1-5 cd /opt/intel-pusher && /opt/intel-pusher/venv/bin/python main.py --source fed >> /opt/intel-pusher/logs/cron.log 2>&1
 
+# 總經指標（VIX/公債殖利率/信用利差）每個交易日都會變動，只靠上面的每週
+# --source all 檢查不夠及時，額外每個工作日早上跑一次。title含日期確保
+# 每天自然產生新項目，不會因為跟每週all重疊而漏推或重複推。
+0 9 * * 1-5 cd /opt/intel-pusher && /opt/intel-pusher/venv/bin/python main.py --source macro_fred >> /opt/intel-pusher/logs/cron.log 2>&1
+
 # GitHub 自動備份：每日凌晨 3 點執行（加密 PII + commit + push）
 0 3 * * * /opt/intel-pusher/backup.sh >> /opt/intel-pusher/logs/backup.log 2>&1

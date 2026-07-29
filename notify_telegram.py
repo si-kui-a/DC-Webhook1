@@ -4,6 +4,7 @@ notify_telegram.py — Telegram Bot 通知層。
 共用 finfeed 既有的 bot token，讓 intel-pusher 每筆推播同時送到 Telegram。
 """
 import logging
+import re
 import time
 import os
 
@@ -18,6 +19,26 @@ TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
 
 MAX_RETRIES = 3
+
+
+def _to_telegram_markdown(text: str) -> str:
+    """Discord/CommonMark用**粗體**(雙星號),Telegram舊版Markdown只認得
+    *粗體*(單星號)——雙星號原樣送出會顯示成字面上的星號黏在文字旁邊，
+    不會被當成粗體渲染。這裡把雙星號轉成單星號，其餘文字不動。"""
+    return re.sub(r"\*\*(.+?)\*\*", r"*\1*", text)
+
+
+def build_message(title: str, body: str, url: str,
+                   sentiment: str | None = None, sentiment_reason: str | None = None) -> str:
+    """組出排版清楚的Telegram訊息：標題/內文/情緒判斷(可選)/連結各自分段，
+    用分隔線隔開，不會黏成一團。body內若含Discord風格的**粗體**會轉成
+    Telegram認得的*粗體*。"""
+    sep = "\n" + "─" * 20 + "\n"
+    parts = [f"*{title}*", sep.strip("\n"), _to_telegram_markdown(body.strip())]
+    if sentiment:
+        parts.append(f"\n📊 AI 情緒判斷：{sentiment}（{sentiment_reason or '無理由'}）")
+    parts.append(f"\n🔗 {url}")
+    return "\n".join(parts)
 
 
 def send_message(text: str, parse_mode: str = "Markdown") -> bool:

@@ -251,14 +251,30 @@ def run_source(key: str):
             # key)；macro_fred會依閥值判斷結果明確設True/False,只有觸發閥值
             # 才同步Telegram,避免每日固定推送的Discord訊息連帶洗版Telegram。
             if raw.get("telegram_alert", True):
-                sentiment_line = f"\nAI 情緒判斷：{sentiment}（{sentiment_reason}）\n" if sentiment else ""
-                tg_text = (
-                    f"*{item['title']}*\n"
-                    f"{item.get('summary') or '（無摘要）'}\n"
-                    f"{sentiment_line}\n"
-                    f"🔗 {item['url']}"
+                tg_text = notify_telegram.build_message(
+                    title=item["title"],
+                    body=item.get("summary") or "（無摘要）",
+                    sentiment=sentiment,
+                    sentiment_reason=sentiment_reason,
+                    url=item["url"],
                 )
                 notify_telegram.send_message(tg_text)
+
+            # 額外推播到獨立警報頻道(目前只有macro_fred的異常閾值觸發時
+            # 會設這個欄位，見scrapers/macro_fred.py)，跟每日固定報告的
+            # 頻道分開，避免警報被例行內容稀釋，不影響主要webhook的推播
+            # 結果判定(失敗只記log，不算這筆item失敗)。
+            secondary_env = raw.get("secondary_webhook_env")
+            if secondary_env:
+                secondary_url = os.getenv(secondary_env)
+                if secondary_url:
+                    sec_ok, sec_status, sec_err = send_webhook(secondary_url, embed)
+                    if sec_ok:
+                        logger.info(f"[{key}] 額外推播到警報頻道成功")
+                    else:
+                        logger.error(f"[{key}] 額外推播到警報頻道失敗（HTTP {sec_status}）：{sec_err}")
+                else:
+                    logger.error(f"[{key}] 缺少警報頻道環境變數 {secondary_env}")
         else:
             logger.error(f"[{key}] 推播失敗（HTTP {status}）：{err}")
 

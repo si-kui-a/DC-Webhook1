@@ -206,3 +206,34 @@ webhook、不改寫 git 歷史移除該 commit。
   這是 textrank4zh 套件本身斷句規則的行為，不是本專案程式碼的 bug，
   故意不 patch 這個第三方套件的斷句邏輯（理由同 PAT-06 主文：不修改
   第三方套件內部行為）。
+
+---
+
+### [PAT-07] 多來源合併 pipeline：便宜檢查須先於昂貴運算
+**規則**：dedup/日期過濾必須先做，summarize/detail頁請求只對確認新增的
+項目才做。cbc_digest 曾因反序（先摘要後判斷）卡 7 分鐘（對 500 筆歷史
+逐一算摘要才發現早已抓過）。
+
+### [PAT-08] 跨頻道共用來源，去重鍵依頻道拆分，不可共用
+**規則**：同一文章要給多頻道各自角度處理時，source_id 依頻道加後綴
+（如 `princetonchen.crypto`／`.macrotech`）。共用一個 source_id，先處理
+的頻道會標記掉 dedup_key，其他頻道永遠抓不到同一篇。
+
+### [PAT-09] Discord 與 Telegram 的 Markdown 語法不通用
+**規則**：Discord/CommonMark 用 `**粗體**`，Telegram 舊版 Markdown 只認
+`*粗體*`。共用文字須經轉換（見 `notify_telegram._to_telegram_markdown`），
+不可直接搬用，否則星號原樣顯示、排版糊在一起。
+
+### [PAT-10] 「即時抓取」≠ 資料本身逐日變動
+**規則**：抓取頻率與資料實際發布週期是兩件事（WALCL/TGA 為 FRED 週頻，
+每週三發布）。新增資料源前先查證實際發布週期，避免對使用者做出不實際
+的即時性承諾。
+
+### [PAT-11] 技術可存取 ≠ 有權限抓取
+**規則**：HTTP 200 不代表可以爬，須另查 robots.txt／平台條款（Threads
+robots.txt 明確禁止自動化收集且點名擋 ClaudeBot）。技術可行性與使用
+授權是兩道獨立的檢查，缺一不可。
+
+### [PAT-12] 多來源首次執行閘門判斷用 any()，不是 all()
+**規則**：混合「已有歷史的舊來源」與「全新來源」時，`all(count==0)`
+會被舊來源拖累、誤判非首次而讓閘門失效；須用 `any(count==0)`。

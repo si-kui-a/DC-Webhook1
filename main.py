@@ -8,6 +8,12 @@ main.py — 主執行入口。
     python main.py --source etf0050
     python main.py --source macro_fred
     python main.py --source substack_easypoint
+    python main.py --source twse_tsmc
+    python main.py --source twse_chunghwa
+    python main.py --source us_stock_digest
+    python main.py --source crypto_digest
+    python main.py --source macro_tech_digest
+    python main.py --source geopolitics_digest
     python main.py --source all
 
 cron 排程範例見 crontab.example。
@@ -16,7 +22,8 @@ import argparse
 import logging
 import os
 import sys
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
+from email.utils import parsedate_to_datetime
 
 import truststore
 
@@ -30,7 +37,9 @@ import summarizer_en
 import summarizer_zh
 import notify_telegram
 from push_webhook import build_embed, send_webhook
-from scrapers import tsmc, fed, cbc, etf0050, macro_fred, substack_easypoint
+from scrapers import tsmc, fed, cbc, etf0050, macro_fred, substack_easypoint, twse_financials
+from scrapers import substack_generic
+import digest_format
 from scrapers import scholarship_daad, scholarship_moe, scholarship_thu, scholarship_efg
 from scrapers import scholarship_util
 
@@ -66,6 +75,12 @@ SOURCE_REGISTRY = {
     "macro_fred": (macro_fred.fetch, "WEBHOOK_INSTITUTIONAL_MACRO", macro_fred.SOURCE_NAME, macro_fred.SOURCE_ID),
     "substack_easypoint": (substack_easypoint.fetch, "WEBHOOK_ANALYST_EASYPOINT",
                             substack_easypoint.SOURCE_NAME, substack_easypoint.SOURCE_ID),
+    # 財報/營收為純事實陳述(TWSE官方開放資料,非AI敘事生成),tsmc這支併入既有
+    # 台積電新聞頻道(同公司同頻道),中華電是全新公司,獨立開一個頻道。
+    "twse_tsmc": (twse_financials.fetch_tsmc, "WEBHOOK_INSTITUTIONAL_TSMC",
+                  twse_financials.SOURCE_NAME_TSMC, twse_financials.SOURCE_ID_TSMC),
+    "twse_chunghwa": (twse_financials.fetch_chunghwa, "WEBHOOK_CHUNGHWA",
+                      twse_financials.SOURCE_NAME_CHUNGHWA, twse_financials.SOURCE_ID_CHUNGHWA),
 }
 
 # 獎學金來源（批次模式，共用一個 webhook URL，推播合併為一條訊息）
@@ -452,9 +467,193 @@ def run_scholarship():
     notify_telegram.send_message(tg_brief)
 
 
+# 晚間彙整頻道(甲類:AI敘事交叉比對,見設計討論)。頻道間共用同一套執行邏輯
+# (run_digest_channel),只是設定不同——同一篇文章要跨頻道被不同角度消化的
+# 來源(princetonchen/wublockchain123)在scrapers/substack_generic.py
+# 裡用「同feed網址+不同source_id」各自獨立設定,避免共用dedup_key導致
+# 先處理的頻道把去重記錄標記掉、其他頻道永遠抓不到同一篇。
+#
+# 美股個股/技術分析統整沿用原本「美股送分題」頻道的webhook環境變數(頻道
+# 本身已在Discord改名，webhook綁的是頻道ID不是顯示名稱，不用換)。
+DIGEST_CHANNELS = {
+    "us_stock_digest": {
+        "webhook_env": "WEBHOOK_ANALYST_EASYPOINT",
+        "channel_title": "美股個股/技術分析統整",
+        "angle": (
+            "個股/類股技術面(支撐壓力、動能、財報後反應)、進出場邏輯、短線交易"
+            "策略。目標是讓讀者知道今天哪些股票的技術結構出現變化，各作者的"
+            "操作邏輯是什麼。"
+        ),
+        "feeds": substack_generic.US_STOCK_FEEDS,
+    },
+    "crypto_digest": {
+        "webhook_env": "WEBHOOK_CRYPTO",
+        "channel_title": "加密貨幣統整",
+        "angle": (
+            "鏈上數據、幣價與流動性動向、DeFi/交易所動態、監管消息對幣圈操作"
+            "的直接影響。目標是讓讀者知道今天幣圈發生了什麼、對持倉/操作有"
+            "什麼意義。跨頻來源(如Tiger Capital Research)只抽取跟幣圈直接"
+            "相關的段落，其餘(地緣政治、純總經)不列入。"
+        ),
+        "feeds": substack_generic.CRYPTO_FEEDS,
+    },
+    "macro_tech_digest": {
+        "webhook_env": "WEBHOOK_MACRO_TECH",
+        "channel_title": "總經/科技趨勢統整",
+        "angle": (
+            "總體經濟數據解讀、科技產業(AI/雲端/半導體)的中長線結構性趨勢，"
+            "偏投資組合配置的啟示，不是短線交易訊號。目標是讓讀者知道這些"
+            "趨勢對整體判斷/配置有什麼啟示。跨頻來源只抽取總經數據解讀＋"
+            "科技/AI產業趨勢或科技產業長線投資邏輯的部分，不含地緣政治本身、"
+            "不含幣圈鏈上細節。"
+        ),
+        "feeds": substack_generic.MACRO_TECH_FEEDS,
+    },
+    "geopolitics_digest": {
+        "webhook_env": "WEBHOOK_GEOPOLITICS",
+        "channel_title": "地緣政治/安全/時事統整",
+        "angle": (
+            "地緣政治事件、國安/科技管制、供應鏈安全，及其對特定產業(尤其"
+            "半導體/國防/AI)與市場的衝擊路徑。目標是讓讀者知道今天有哪些"
+            "地緣政治/政策事件，可能如何影響哪些產業或資產。跨頻來源只抽取"
+            "地緣政治風險及其市場衝擊的部分。"
+        ),
+        "feeds": substack_generic.GEOPOLITICS_FEEDS,
+    },
+}
+
+# 首次執行安全閘門：多來源合併的digest pipeline第一次跑時，各來源的RSS
+# 歷史項目加總可能上看百篇，塞進單次Gemini呼叫會逾時（實測踩到過），
+# 比照FIRST_RUN_PUSH_CAP精神，只送最新N篇給AI，其餘寫入dedup_key但標記
+# seeded_historical(不是真的推播過)。
+DIGEST_FIRST_RUN_CAP = 15
+
+TAIWAN_TZ = timezone(timedelta(hours=8))
+
+
+def _is_today_in_taiwan(published_at: str | None) -> bool:
+    """晚間彙整頻道只收錄台灣時區(UTC+8)當日發佈的文章,過往文章(哪怕是
+    第一次被我們抓到、對dedup而言算「新」)不納入當日推播。RSS pubDate
+    多為RFC822格式,email.utils.parsedate_to_datetime可解析。解析失敗
+    (格式異常)時預設為True(視為今天)——正常RFC822格式都能正確解析,
+    異常情況比較罕見,寧可誤收不要因為格式問題意外把真正的新文章擋掉。"""
+    if not published_at:
+        return True
+    try:
+        dt = parsedate_to_datetime(published_at)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        dt_tw = dt.astimezone(TAIWAN_TZ)
+        today_tw = datetime.now(TAIWAN_TZ).date()
+        return dt_tw.date() == today_tw
+    except (TypeError, ValueError, OverflowError):
+        return True
+
+
+def run_digest_channel(key: str):
+    """晚間彙整頻道通用執行邏輯：收集當天全部設定來源的新文章，送Gemini做
+    交叉比對，整理成開頭總覽＋分類重點＋引用來源的彙整，最多拆2則訊息推播。"""
+    config = DIGEST_CHANNELS[key]
+    webhook_env = config["webhook_env"]
+    channel_title = config["channel_title"]
+    feeds = config["feeds"]
+
+    if not feeds:
+        logger.info("[%s] 尚未設定任何來源，跳過", key)
+        return
+
+    webhook_url = os.getenv(webhook_env)
+    if not webhook_url:
+        logger.error("[%s] 缺少環境變數 %s，跳過", key, webhook_env)
+        return
+
+    # 用any()不用all()：部分來源可能已在其他頻道/舊pipeline跑過(非首次)，
+    # 但只要有任何一個來源是真正第一次，這次合併起來的new_items就可能
+    # 爆量，閘門就要生效——用all()會被「非首次」的來源拖累，誤判成不需要
+    # 限制(實測踩過，導致大量歷史文章未經篩選全部送進Gemini)。
+    is_first_run = any(
+        db.count_items_for_source(source_id) == 0
+        for source_id, _, _ in feeds
+    )
+
+    raw_items = substack_generic.fetch_all(feeds)
+
+    seen_sources = set()
+    new_items = []
+    archived_only_count = 0
+    for raw in raw_items:
+        source_id = raw["source_id"]
+        if source_id not in seen_sources:
+            db.upsert_source(source_id, raw["source_name"], "digest", raw["url"])
+            seen_sources.add(source_id)
+
+        item = db.insert_item_if_new(
+            source_id=source_id,
+            title=raw["title"],
+            summary=raw.get("summary"),
+            url=raw["url"],
+            published_at=raw.get("published_at"),
+        )
+        if item is None:
+            continue
+
+        if not _is_today_in_taiwan(raw.get("published_at")):
+            db.mark_stale_not_today(item["item_id"])
+            continue
+
+        if is_first_run and len(new_items) >= DIGEST_FIRST_RUN_CAP:
+            db.mark_seeded_historical(item["item_id"])
+            archived_only_count += 1
+            continue
+
+        item["source_name"] = raw["source_name"]
+        new_items.append(item)
+
+    if not new_items:
+        logger.info("[%s] 本次無新資料", key)
+        return
+
+    if archived_only_count:
+        logger.info(
+            "[%s] 首次執行：已存檔 %d 筆歷史資料，僅彙整最新 %d 筆供驗證",
+            key, archived_only_count, len(new_items),
+        )
+
+    digest = ai_insight.build_channel_digest(config["angle"], new_items)
+    if not digest:
+        logger.error("[%s] Gemini彙整失敗（額度用盡/網路錯誤/回應格式不對），本次略過推播", key)
+        return
+
+    date_str = datetime.now().strftime("%Y-%m-%d")
+    embeds, omitted_count = digest_format.build_digest_embeds(digest, channel_title, date_str)
+
+    all_ok = True
+    for i, embed in enumerate(embeds):
+        ok, status, err = send_webhook(webhook_url, embed)
+        if ok:
+            logger.info("[%s] 彙整推播成功（訊息 %d/%d）", key, i + 1, len(embeds))
+        else:
+            all_ok = False
+            logger.error("[%s] 彙整推播失敗（訊息 %d/%d）：HTTP %s %s", key, i + 1, len(embeds), status, err)
+
+    # 收錄進訊息的重點對應到的items一律標published；篇幅省略的另外標記，
+    # 兩者都不是「還沒處理過」，避免dedup之外還被誤判成待推播。
+    # 這裡簡化處理：只要AI彙整跟推播本身成功，當次收集到的new_items全部視為
+    # 已處理(published)；細緻到「哪個item對應到哪個point被省略」需要
+    # ai_insight回傳時保留item_id關聯，暫用簡化版。
+    if all_ok:
+        for item in new_items:
+            db.mark_published(item["item_id"])
+        logger.info(
+            "[%s] 完成，共 %d 則新項目，彙整成 %d 則訊息%s",
+            key, len(new_items), len(embeds),
+            f"（另有{omitted_count}則重點因篇幅省略）" if omitted_count else "",
+        )
+
+
 def main():
     parser = argparse.ArgumentParser(description="本地爬蟲 → Discord Webhook 推播")
-    parser.add_argument("--source", choices=list(SOURCE_REGISTRY.keys()) + ["all"],
+    parser.add_argument("--source", choices=list(SOURCE_REGISTRY.keys()) + ["all"] + list(DIGEST_CHANNELS.keys()),
                         help="執行單一來源（與 --scholarship 二選一）")
     parser.add_argument("--scholarship", action="store_true",
                         help="批次執行所有獎學金來源")
@@ -470,6 +669,8 @@ def main():
 
     if args.scholarship:
         run_scholarship()
+    elif args.source in DIGEST_CHANNELS:
+        run_digest_channel(args.source)
     elif args.source == "all":
         for key in SOURCE_REGISTRY:
             run_source(key)

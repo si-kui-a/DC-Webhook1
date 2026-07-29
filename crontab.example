@@ -15,5 +15,11 @@
 # 就推、沒有就靜默跳過，不需要額外的時間判斷邏輯
 0 9 * * * cd /opt/intel-pusher && /opt/intel-pusher/venv/bin/python main.py --source substack_easypoint >> /opt/intel-pusher/logs/cron.log 2>&1
 
+# 台積電/中華電財報+月營收(TWSE官方開放資料,免key零風險,每日檢查零成本)。
+# 資料本身是月/季頻更新,但用每日檢查把「公告後多久被抓到」的延遲壓在
+# 一天內,而非隨機落在1~30天之間;去重機制確保沒有新一期資料時不會重複推播。
+0 9 * * * cd /opt/intel-pusher && /opt/intel-pusher/venv/bin/python main.py --source twse_tsmc >> /opt/intel-pusher/logs/cron.log 2>&1
+0 9 * * * cd /opt/intel-pusher && /opt/intel-pusher/venv/bin/python main.py --source twse_chunghwa >> /opt/intel-pusher/logs/cron.log 2>&1
+
 # GitHub 自動備份：每日凌晨 3 點執行（加密 PII + commit + push）
 0 3 * * * /opt/intel-pusher/backup.sh >> /opt/intel-pusher/logs/backup.log 2>&1

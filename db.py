@@ -94,6 +94,28 @@ def mark_seeded_historical(item_id: str):
     conn.close()
 
 
+def mark_stale_not_today(item_id: str):
+    """晚間彙整頻道要求「只收錄台灣時區當日發佈的文章」（見main.py
+    _is_today_in_taiwan），published_at不是今天的項目用這個標記——跟
+    seeded_historical（首次執行閘門）、digest_omitted（篇幅裝不下）語意
+    都不同，是「這篇本身不屬於今天」，維持狀態欄位語意誠實。"""
+    conn = get_conn()
+    conn.execute("UPDATE item SET status='stale_not_today' WHERE item_id=?", (item_id,))
+    conn.commit()
+    conn.close()
+
+
+def mark_digest_omitted(item_id: str):
+    """晚間彙整頻道因篇幅（最多2則訊息裝不下）被省略的項目用這個，不是
+    'published'（沒有真的顯示給使用者看過內容）也不是'seeded_historical'
+    （那是首次執行安全閘門的語意，跟這裡「篇幅不夠」的原因不同），維持
+    狀態欄位語意的誠實，供之後回顧「哪些內容常態性被省略」使用。"""
+    conn = get_conn()
+    conn.execute("UPDATE item SET status='digest_omitted' WHERE item_id=?", (item_id,))
+    conn.commit()
+    conn.close()
+
+
 def update_summary(item_id: str, summary: str):
     """摘要是在 insert_item_if_new() 之後才算出來的（cbc 直接用 RSS
     description，fed/tsmc 需要多發一次 detail 頁請求），先用 summary=None

@@ -58,18 +58,13 @@ logger = logging.getLogger("main")
 load_dotenv()
 
 # source_id -> (fetch函式, 對應Webhook環境變數名稱, 顯示名稱)
-# Webhook環境變數改用中文命名(使用者要求,方便一眼看出用途)。已實測驗證
-# python-dotenv + os.environ在Windows/Linux皆能正確處理中文鍵名——這裡
-# 全程只在Python內部用os.getenv()查詢,從未經過shell變數展開語法
-# (crontab.example也只是呼叫`python main.py --source X`,不會在shell層
-# 直接引用這些鍵名),所以不受bash變數命名規則(僅限ASCII識別字)限制。
 SOURCE_REGISTRY = {
-    "tsmc": (tsmc.fetch, "台積電新聞", tsmc.SOURCE_NAME, tsmc.SOURCE_ID),
-    "fed": (fed.fetch, "聯準會新聞", fed.SOURCE_NAME, fed.SOURCE_ID),
-    "cbc": (cbc.fetch, "央行新聞", cbc.SOURCE_NAME, cbc.SOURCE_ID),
-    "etf0050": (etf0050.fetch, "台股權值股追蹤", etf0050.SOURCE_NAME, etf0050.SOURCE_ID),
-    "macro_fred": (macro_fred.fetch, "總經指標追蹤", macro_fred.SOURCE_NAME, macro_fred.SOURCE_ID),
-    "substack_easypoint": (substack_easypoint.fetch, "美股送分題",
+    "tsmc": (tsmc.fetch, "WEBHOOK_INSTITUTIONAL_TSMC", tsmc.SOURCE_NAME, tsmc.SOURCE_ID),
+    "fed": (fed.fetch, "WEBHOOK_INSTITUTIONAL_FED", fed.SOURCE_NAME, fed.SOURCE_ID),
+    "cbc": (cbc.fetch, "WEBHOOK_INSTITUTIONAL_CBC", cbc.SOURCE_NAME, cbc.SOURCE_ID),
+    "etf0050": (etf0050.fetch, "WEBHOOK_INSTITUTIONAL_0050", etf0050.SOURCE_NAME, etf0050.SOURCE_ID),
+    "macro_fred": (macro_fred.fetch, "WEBHOOK_INSTITUTIONAL_MACRO", macro_fred.SOURCE_NAME, macro_fred.SOURCE_ID),
+    "substack_easypoint": (substack_easypoint.fetch, "WEBHOOK_ANALYST_EASYPOINT",
                             substack_easypoint.SOURCE_NAME, substack_easypoint.SOURCE_ID),
 }
 
@@ -273,7 +268,7 @@ def run_source(key: str):
         _record_summary(key, how, "無新資料（去重生效）")
 
 
-SCHOLARSHIP_WEBHOOK_ENV = "獎學金快報"
+SCHOLARSHIP_WEBHOOK_ENV = "WEBHOOK_SCHOLARSHIP"
 # 首次執行安全閘門：每來源最多推播 N 筆（避免洗版）
 SCHOLARSHIP_FIRST_RUN_CAP = 20
 

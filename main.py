@@ -22,6 +22,7 @@ truststore.inject_into_ssl()  # 修 certifi 對某些政府網站(如 cbc.gov.tw
 
 from dotenv import load_dotenv
 
+import ai_insight
 import db
 import summarizer_en
 import summarizer_zh
@@ -186,9 +187,31 @@ def run_source(key: str):
         # 運算。summary 一開始是 None（insert 時就是這樣），這裡算出來後
         # 才補寫回 db，讓 db 裡存的內容跟實際推播出去的一致。
         summary = compute_summary(key, raw)
+
+        # fed/tsmc(英文來源)才需要中文翻譯+利多利空判斷,cbc本來就是中文。
+        # 用Gemini免費層把既有抽取式摘要(已經是LexRank挑出的重點句,不重新
+        # 抓detail頁)翻譯+分類;Gemini失敗(額度用盡/網路錯誤/未設定key)
+        # 一律靜默退回原本的英文抽取式摘要,不影響推播本身。sentiment不寫
+        # 進db——它是每次推播當下的輔助判斷,不算「這則新聞的固定摘要」,
+        # 不影響dedup/db一致性原則。
+        sentiment = None
+        sentiment_reason = None
+        if summary and key in DETAIL_FETCHERS:
+            insight = ai_insight.get_translation_and_sentiment(summary)
+            if insight:
+                summary = insight["zh_summary"]
+                sentiment = insight["sentiment"]
+                sentiment_reason = insight["sentiment_reason"]
+
         if summary:
             db.update_summary(item["item_id"], summary)
             item["summary"] = summary
+
+        fields = None
+        color = 5793266
+        if sentiment:
+            fields = [{"name": f"AI 情緒判斷：{sentiment}", "value": sentiment_reason or "（無理由）"}]
+            color = 15105570  # 橙色,呼應push_webhook.py既有「推論性內容」色碼慣例
 
         embed = build_embed(
             title=item["title"],
@@ -196,6 +219,8 @@ def run_source(key: str):
             url=item["url"],
             footer=source_name,
             published_at=item.get("published_at"),
+            fields=fields,
+            color=color,
         )
         ok, status, err = send_webhook(webhook_url, embed)
         db.log_delivery(item["item_id"], key, status, err)
@@ -204,9 +229,11 @@ def run_source(key: str):
             pushed_count += 1
             logger.info(f"[{key}] 已推播：{item['title'][:40]}")
             # 同步推送到 Telegram（與 finfeed 共用 bot token）
+            sentiment_line = f"\nAI 情緒判斷：{sentiment}（{sentiment_reason}）\n" if sentiment else ""
             tg_text = (
                 f"*{item['title']}*\n"
-                f"{item.get('summary') or '（無摘要）'}\n\n"
+                f"{item.get('summary') or '（無摘要）'}\n"
+                f"{sentiment_line}\n"
                 f"🔗 {item['url']}"
             )
             notify_telegram.send_message(tg_text)

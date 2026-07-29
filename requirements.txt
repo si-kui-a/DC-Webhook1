@@ -14,3 +14,6 @@ textrank4zh>=0.3
 numpy>=2.0
 scipy>=1.14
 networkx>=3.0
+
+# ai_insight.py（fed/tsmc中文翻譯+利多利空判斷）純用requests呼叫Gemini
+# API，不需要額外套件，見上方requests>=2.31。

@@ -13,6 +13,8 @@ main.py — 主執行入口。
     python main.py --source geopolitics_digest
     python main.py --source tsmc_digest
     python main.py --source cbc_digest
+    python main.py --source tw_stock_meta
+    python main.py --source crypto_meta
     python main.py --source all
 
 tsmc/cbc已從即時逐篇推播改為晚間彙整(見DIGEST_CHANNELS)，substack_easypoint
@@ -759,10 +761,118 @@ def run_digest_channel(key: str):
             f"（另有{omitted_count}則重點因篇幅省略）" if omitted_count else "",
         )
 
+        # 存檔這次彙整的完整文字(獨立的digest_report.*命名空間,不影響原本
+        # 文章來源的dedup)，供大總結頻道(run_meta_summary_channel)之後
+        # 讀取當天各頻道已產出的內容——AI敘事彙整頻道原本產出後只推播、
+        # 沒有存檔，這是新增的持久化機制。
+        report_text = digest["overview"] + "\n\n" + "\n".join(
+            f"【{p['category']}】{p['point']}" for p in digest["points"]
+        )
+        report_source_id = f"digest_report.{key}"
+        db.upsert_source(report_source_id, f"{channel_title}彙整存檔", "digest_report", "")
+        saved = db.insert_item_if_new(
+            source_id=report_source_id,
+            title=f"{channel_title} 彙整（{date_str}）",
+            summary=report_text,
+            url=webhook_url,
+            published_at=date_str,
+        )
+        if saved:
+            db.mark_published(saved["item_id"])
+
+
+# 大總結頻道(乙類→其實是丙類:彙整「其餘頻道已產出的內容」而非原始新聞,
+# 需要AI綜合研判進出場/情緒判斷,見設計討論使用者確認)。
+# key -> (讀取用source_id, 顯示名稱)。digest_report.*是run_digest_channel()
+# 存檔的彙整文字；fred.macro_indicators/stockintelli.tracking是既有
+# SOURCE_REGISTRY來源，本來就把完整報告存在item.summary，直接沿用不用
+# 額外存檔。twse_tsmc/twse_chunghwa/中華電財報(一天可能兩筆不同標題)
+# 暫不納入，財報季頻資料對「今天該不該進出場」的即時判斷幫助有限，
+# 之後真的需要可再擴充。
+CONTRIBUTING_CHANNELS = {
+    "us_stock": ("digest_report.us_stock_digest", "美股個股/技術分析統整"),
+    "crypto": ("digest_report.crypto_digest", "加密貨幣統整"),
+    "macro_tech": ("digest_report.macro_tech_digest", "總經/科技趨勢統整"),
+    "geopolitics": ("digest_report.geopolitics_digest", "地緣政治/安全/時事統整"),
+    "tsmc": ("digest_report.tsmc_digest", "台積電新聞"),
+    "cbc": ("digest_report.cbc_digest", "央行新聞"),
+    "macro_fred": ("fred.macro_indicators", "總經指標追蹤"),
+    "etf0050": ("stockintelli.tracking", "台股權值股追蹤"),
+}
+
+META_SUMMARY_CHANNELS = {
+    "tw_stock_meta": {
+        "webhook_env": "WEBHOOK_TW_STOCK_META",
+        "channel_title": "台股大總結",
+        "angle": (
+            "綜合研判台股各標的現在是否應進出場、市場情況/情緒(樂觀/悲觀)、"
+            "理性面(數據)與實際面(市場反應)是否一致、產業與法人動向，"
+            "美股對台股的傳導影響也要納入考量。"
+        ),
+        "sources": ["etf0050", "tsmc", "cbc", "macro_fred", "macro_tech", "geopolitics", "us_stock"],
+    },
+    "crypto_meta": {
+        "webhook_env": "WEBHOOK_CRYPTO_META",
+        "channel_title": "幣圈大總結",
+        "angle": (
+            "綜合研判幣圈各標的現在是否應進出場、市場情況/情緒(樂觀/悲觀)、"
+            "理性面(數據)與實際面(市場反應)是否一致、總經流動性對幣圈的"
+            "傳導影響。"
+        ),
+        "sources": ["crypto", "macro_fred", "macro_tech", "geopolitics"],
+    },
+}
+
+
+def run_meta_summary_channel(key: str):
+    """大總結頻道：讀取各貢獻頻道當天已產出的報告(不重新抓原始新聞)，
+    送Gemini綜合研判進出場/情緒，最多拆2則訊息推播。任一貢獻頻道今天
+    沒有報告就跳過該來源，不是整個大總結失敗。"""
+    config = META_SUMMARY_CHANNELS[key]
+    webhook_url = os.getenv(config["webhook_env"])
+    if not webhook_url:
+        logger.error("[%s] 缺少環境變數 %s，跳過", key, config["webhook_env"])
+        return
+
+    today_str = datetime.now().strftime("%Y-%m-%d")
+    reports = []
+    for src_key in config["sources"]:
+        source_id, channel_name = CONTRIBUTING_CHANNELS[src_key]
+        text = db.get_summary_for_date(source_id, today_str)
+        if text:
+            reports.append({"channel_name": channel_name, "report_text": text})
+
+    if not reports:
+        logger.info("[%s] 今日尚無任何來源頻道報告可供彙整，跳過", key)
+        return
+
+    summary = ai_insight.build_meta_summary(config["angle"], reports)
+    if not summary:
+        logger.error("[%s] Gemini大總結彙整失敗（額度用盡/網路錯誤/回應格式不對），本次略過推播", key)
+        return
+
+    embeds, omitted_count = digest_format.build_digest_embeds(summary, config["channel_title"], today_str)
+    all_ok = True
+    for i, embed in enumerate(embeds):
+        ok, status, err = send_webhook(webhook_url, embed)
+        if ok:
+            logger.info("[%s] 大總結推播成功（訊息 %d/%d）", key, i + 1, len(embeds))
+        else:
+            all_ok = False
+            logger.error("[%s] 大總結推播失敗（訊息 %d/%d）：HTTP %s %s", key, i + 1, len(embeds), status, err)
+
+    if all_ok:
+        logger.info(
+            "[%s] 完成，彙整 %d 個來源頻道，共 %d 則訊息%s",
+            key, len(reports), len(embeds),
+            f"（另有{omitted_count}則重點因篇幅省略）" if omitted_count else "",
+        )
+
 
 def main():
     parser = argparse.ArgumentParser(description="本地爬蟲 → Discord Webhook 推播")
-    parser.add_argument("--source", choices=list(SOURCE_REGISTRY.keys()) + ["all"] + list(DIGEST_CHANNELS.keys()),
+    parser.add_argument("--source", choices=list(SOURCE_REGISTRY.keys()) + ["all"]
+                                     + list(DIGEST_CHANNELS.keys()) + list(META_SUMMARY_CHANNELS.keys()),
                         help="執行單一來源（與 --scholarship 二選一）")
     parser.add_argument("--scholarship", action="store_true",
                         help="批次執行所有獎學金來源")
@@ -780,6 +890,8 @@ def main():
         run_scholarship()
     elif args.source in DIGEST_CHANNELS:
         run_digest_channel(args.source)
+    elif args.source in META_SUMMARY_CHANNELS:
+        run_meta_summary_channel(args.source)
     elif args.source == "all":
         for key in SOURCE_REGISTRY:
             run_source(key)

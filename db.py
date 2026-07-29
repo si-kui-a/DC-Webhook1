@@ -127,6 +127,21 @@ def update_summary(item_id: str, summary: str):
     conn.close()
 
 
+def get_summary_for_date(source_id: str, published_at: str) -> str | None:
+    """依source_id+published_at取回該筆的summary全文,供大總結頻道讀取
+    「當天某頻道已經產出的完整報告內容」(不重新抓取原始資料，直接沿用
+    既有的item.summary，見main.py run_meta_summary_channel)。多筆符合時
+    取最新寫入的一筆。"""
+    conn = get_conn()
+    row = conn.execute(
+        "SELECT summary FROM item WHERE source_id=? AND published_at=? "
+        "ORDER BY fetched_at DESC LIMIT 1",
+        (source_id, published_at),
+    ).fetchone()
+    conn.close()
+    return row["summary"] if row else None
+
+
 def log_delivery(item_id: str | None, channel: str, http_status: int | None, error_message: str | None = None):
     conn = get_conn()
     conn.execute(

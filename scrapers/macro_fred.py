@@ -228,6 +228,9 @@ def fetch() -> list[dict]:
     lines = []
     any_alert = False
     any_success = False
+    # Telegram只推警示重點,不推整篇報告(比照etf0050.py同一套設計,見
+    # main.py的telegram_summary覆蓋機制)。
+    alert_warnings: list[str] = []
 
     for key, (series_id, label, unit) in SERIES.items():
         try:
@@ -245,8 +248,10 @@ def fetch() -> list[dict]:
         change = latest - prev
         alert = _check_alert(key, latest, change, rows)
         any_alert = any_alert or alert
-
         arrow = "🔺" if change > 0 else ("🔻" if change < 0 else "▪")
+        if alert:
+            alert_warnings.append(f"{label}：{latest}{unit}（{arrow}{change:+.2f}{unit}）")
+
         flag = " ⚠️" if alert else ""
         lines.append(
             f"- {label}：{latest}{unit} "
@@ -299,6 +304,8 @@ def fetch() -> list[dict]:
     }
     if any_alert:
         item["secondary_webhook_env"] = ALERT_WEBHOOK_ENV
+        # Telegram只推警示重點,不推整篇報告(比照etf0050.py同一套設計)。
+        item["telegram_summary"] = "⚠️ 今日總經異常警示：\n" + "\n".join(f"- {w}" for w in alert_warnings)
     return [item]
 
 

@@ -2,19 +2,21 @@
 main.py — 主執行入口。
 
 用法：
-    python main.py --source tsmc
     python main.py --source fed
-    python main.py --source cbc
     python main.py --source etf0050
     python main.py --source macro_fred
-    python main.py --source substack_easypoint
     python main.py --source twse_tsmc
     python main.py --source twse_chunghwa
     python main.py --source us_stock_digest
     python main.py --source crypto_digest
     python main.py --source macro_tech_digest
     python main.py --source geopolitics_digest
+    python main.py --source tsmc_digest
+    python main.py --source cbc_digest
     python main.py --source all
+
+tsmc/cbc已從即時逐篇推播改為晚間彙整(見DIGEST_CHANNELS)，substack_easypoint
+已併入us_stock_digest，三者都不再是SOURCE_REGISTRY的獨立--source選項。
 
 cron 排程範例見 crontab.example。
 """
@@ -37,7 +39,7 @@ import summarizer_en
 import summarizer_zh
 import notify_telegram
 from push_webhook import build_embed, send_webhook
-from scrapers import tsmc, fed, cbc, etf0050, macro_fred, substack_easypoint, twse_financials
+from scrapers import tsmc, fed, cbc, etf0050, macro_fred, twse_financials
 from scrapers import substack_generic
 import digest_format
 from scrapers import scholarship_daad, scholarship_moe, scholarship_thu, scholarship_efg
@@ -67,14 +69,12 @@ logger = logging.getLogger("main")
 load_dotenv()
 
 # source_id -> (fetch函式, 對應Webhook環境變數名稱, 顯示名稱)
+# tsmc/cbc/substack_easypoint已移出(改走DIGEST_CHANNELS的晚間彙整,見設計
+# 討論)，這裡只留「維持即時逐篇推播」的來源，跟純事實陳述(財報/營收)。
 SOURCE_REGISTRY = {
-    "tsmc": (tsmc.fetch, "WEBHOOK_INSTITUTIONAL_TSMC", tsmc.SOURCE_NAME, tsmc.SOURCE_ID),
     "fed": (fed.fetch, "WEBHOOK_INSTITUTIONAL_FED", fed.SOURCE_NAME, fed.SOURCE_ID),
-    "cbc": (cbc.fetch, "WEBHOOK_INSTITUTIONAL_CBC", cbc.SOURCE_NAME, cbc.SOURCE_ID),
     "etf0050": (etf0050.fetch, "WEBHOOK_INSTITUTIONAL_0050", etf0050.SOURCE_NAME, etf0050.SOURCE_ID),
     "macro_fred": (macro_fred.fetch, "WEBHOOK_INSTITUTIONAL_MACRO", macro_fred.SOURCE_NAME, macro_fred.SOURCE_ID),
-    "substack_easypoint": (substack_easypoint.fetch, "WEBHOOK_ANALYST_EASYPOINT",
-                            substack_easypoint.SOURCE_NAME, substack_easypoint.SOURCE_ID),
     # 財報/營收為純事實陳述(TWSE官方開放資料,非AI敘事生成),tsmc這支併入既有
     # 台積電新聞頻道(同公司同頻道),中華電是全新公司,獨立開一個頻道。
     "twse_tsmc": (twse_financials.fetch_tsmc, "WEBHOOK_INSTITUTIONAL_TSMC",
@@ -94,15 +94,10 @@ SCHOLARSHIP_REGISTRY = {
 # 連續失敗超過此次數，視為需要人工介入（用於未來接外部告警，本 MVP 先只記 log）
 FAIL_THRESHOLD = 3
 
-# 首次執行安全閘門：只套用在 cbc（RSS 一次回傳全部歷史，curl 實測約500筆，
-# 資料庫是空的時候不能全部當「新項目」推播，否則洗版）。fed/tsmc 本來就是
-# 個位數筆數，沒有這個風險，故不列在這裡（值為 None 代表不套用閘門）。
-# substack_easypoint 一次回傳約20篇歷史文章，數量不像cbc的500筆那麼極端，
-# 但剛新開的DC頻道一次跳20則還是偏多，同樣套用閘門。
-FIRST_RUN_PUSH_CAP = {
-    "cbc": 5,
-    "substack_easypoint": 5,
-}
+# 首次執行安全閘門：fed 本來就是個位數筆數，沒有這個風險，故不列在這裡
+# （值為 None 代表不套用閘門）。cbc/substack_easypoint已移到DIGEST_CHANNELS
+# (見DIGEST_FIRST_RUN_CAP，同樣邏輯的閘門)，這裡不再需要。
+FIRST_RUN_PUSH_CAP = {}
 
 # 詳情頁抓取函式，只有 fed/tsmc 需要（cbc 直接用 RSS description，
 # stockintelli (etf0050) 改為 RSC payload 嵌入式資料，不需要詳情頁）。
@@ -475,6 +470,56 @@ def run_scholarship():
 #
 # 美股個股/技術分析統整沿用原本「美股送分題」頻道的webhook環境變數(頻道
 # 本身已在Discord改名，webhook綁的是頻道ID不是顯示名稱，不用換)。
+def _normalize_tsmc(raw: dict) -> dict:
+    """輕量正規化(不含summary——summary留到dedup/日期/首次執行閘門都確認
+    「這筆真的要用」之後才算，避免對整批(含已抓過的歷史文章)都白白做一次
+    detail頁請求+抽取式摘要運算，這是實測時cbc卡住逾7分鐘才發現的效能
+    問題，tsmc同一個模式先一併修正)。"""
+    return {
+        "title": raw["title"],
+        "url": raw["url"],
+        "published_at": raw.get("published_at"),
+        "source_id": tsmc.SOURCE_ID,
+        "source_name": tsmc.SOURCE_NAME,
+    }
+
+
+def _normalize_cbc(raw: dict) -> dict:
+    return {
+        "title": raw["title"],
+        "url": raw["url"],
+        "published_at": raw.get("published_at"),
+        "source_id": cbc.SOURCE_ID,
+        "source_name": cbc.SOURCE_NAME,
+    }
+
+
+def _normalize_substack(raw: dict) -> dict:
+    """substack來源的raw本身已經是完整形狀(RSS內容已含summary，不需要
+    額外請求)，這裡只是統一介面，不做任何轉換。"""
+    return raw
+
+
+# 晚間彙整頻道(甲類:AI敘事交叉比對,見設計討論)。頻道間共用同一套執行邏輯
+# (run_digest_channel)，每個頻道設定自己的fetch_fn(回傳list[dict]，每筆
+# 需含title/summary/url/published_at/source_id/source_name)與source_ids
+# (供首次執行閘門判斷用)。
+#
+# 美股個股/技術分析統整沿用原本「美股送分題」頻道的webhook環境變數(頻道
+# 本身已在Discord改名，webhook綁的是頻道ID不是顯示名稱，不用換)。台積電/
+# 央行新聞從原本SOURCE_REGISTRY的即時逐篇推播移到這裡的晚間彙整(見設計
+# 討論)，財報/營收(twse_tsmc)維持原本獨立的事實陳述推播，兩者都會進同一個
+# Discord頻道，只是各自獨立訊息，不強行合併成一則。
+# 每個頻道設定：
+#   fetch_fn      -> 回傳list[raw dict]（各來源原生形狀，substack是完整
+#                     形狀含summary；tsmc/cbc只有title/url/published_at）
+#   normalize_fn  -> raw -> {title,url,published_at,source_id,source_name}
+#                     （輕量，不含summary，dedup/日期/首次執行閘門判斷只
+#                     需要這些欄位，故意不算summary，避免對整批歷史文章
+#                     都白白做一次detail頁請求/摘要運算）
+#   summarize_fn  -> raw -> str|None（真正花運算資源的部分，只對「確認
+#                     真的要用」的項目呼叫一次）
+#   source_ids    -> 供首次執行閘門判斷用
 DIGEST_CHANNELS = {
     "us_stock_digest": {
         "webhook_env": "WEBHOOK_ANALYST_EASYPOINT",
@@ -484,7 +529,10 @@ DIGEST_CHANNELS = {
             "策略。目標是讓讀者知道今天哪些股票的技術結構出現變化，各作者的"
             "操作邏輯是什麼。"
         ),
-        "feeds": substack_generic.US_STOCK_FEEDS,
+        "fetch_fn": lambda: substack_generic.fetch_all(substack_generic.US_STOCK_FEEDS),
+        "normalize_fn": _normalize_substack,
+        "summarize_fn": lambda raw: raw.get("summary"),
+        "source_ids": [s[0] for s in substack_generic.US_STOCK_FEEDS],
     },
     "crypto_digest": {
         "webhook_env": "WEBHOOK_CRYPTO",
@@ -495,7 +543,10 @@ DIGEST_CHANNELS = {
             "什麼意義。跨頻來源(如Tiger Capital Research)只抽取跟幣圈直接"
             "相關的段落，其餘(地緣政治、純總經)不列入。"
         ),
-        "feeds": substack_generic.CRYPTO_FEEDS,
+        "fetch_fn": lambda: substack_generic.fetch_all(substack_generic.CRYPTO_FEEDS),
+        "normalize_fn": _normalize_substack,
+        "summarize_fn": lambda raw: raw.get("summary"),
+        "source_ids": [s[0] for s in substack_generic.CRYPTO_FEEDS],
     },
     "macro_tech_digest": {
         "webhook_env": "WEBHOOK_MACRO_TECH",
@@ -507,7 +558,10 @@ DIGEST_CHANNELS = {
             "科技/AI產業趨勢或科技產業長線投資邏輯的部分，不含地緣政治本身、"
             "不含幣圈鏈上細節。"
         ),
-        "feeds": substack_generic.MACRO_TECH_FEEDS,
+        "fetch_fn": lambda: substack_generic.fetch_all(substack_generic.MACRO_TECH_FEEDS),
+        "normalize_fn": _normalize_substack,
+        "summarize_fn": lambda raw: raw.get("summary"),
+        "source_ids": [s[0] for s in substack_generic.MACRO_TECH_FEEDS],
     },
     "geopolitics_digest": {
         "webhook_env": "WEBHOOK_GEOPOLITICS",
@@ -518,7 +572,35 @@ DIGEST_CHANNELS = {
             "地緣政治/政策事件，可能如何影響哪些產業或資產。跨頻來源只抽取"
             "地緣政治風險及其市場衝擊的部分。"
         ),
-        "feeds": substack_generic.GEOPOLITICS_FEEDS,
+        "fetch_fn": lambda: substack_generic.fetch_all(substack_generic.GEOPOLITICS_FEEDS),
+        "normalize_fn": _normalize_substack,
+        "summarize_fn": lambda raw: raw.get("summary"),
+        "source_ids": [s[0] for s in substack_generic.GEOPOLITICS_FEEDS],
+    },
+    "tsmc_digest": {
+        "webhook_env": "WEBHOOK_INSTITUTIONAL_TSMC",
+        "channel_title": "台積電新聞",
+        "angle": (
+            "台積電公司重大訊息(財報發布、法說會公告、股東會決議、購併/合作"
+            "案等)。目標是讓讀者知道公司層級發生了什麼變化，不做投資建議。"
+        ),
+        "fetch_fn": tsmc.fetch,
+        "normalize_fn": _normalize_tsmc,
+        "summarize_fn": lambda raw: compute_summary("tsmc", raw),
+        "source_ids": [tsmc.SOURCE_ID],
+    },
+    "cbc_digest": {
+        "webhook_env": "WEBHOOK_INSTITUTIONAL_CBC",
+        "channel_title": "央行新聞",
+        "angle": (
+            "台灣央行(中央銀行)政策動態、利率決議、匯率/外匯市場相關公告。"
+            "目標是讓讀者知道央行今天發布了什麼、對利率/匯率政策方向有什麼"
+            "含義。"
+        ),
+        "fetch_fn": cbc.fetch,
+        "normalize_fn": _normalize_cbc,
+        "summarize_fn": lambda raw: compute_summary("cbc", raw),
+        "source_ids": [cbc.SOURCE_ID],
     },
 }
 
@@ -556,9 +638,9 @@ def run_digest_channel(key: str):
     config = DIGEST_CHANNELS[key]
     webhook_env = config["webhook_env"]
     channel_title = config["channel_title"]
-    feeds = config["feeds"]
+    source_ids = config["source_ids"]
 
-    if not feeds:
+    if not source_ids:
         logger.info("[%s] 尚未設定任何來源，跳過", key)
         return
 
@@ -571,33 +653,36 @@ def run_digest_channel(key: str):
     # 但只要有任何一個來源是真正第一次，這次合併起來的new_items就可能
     # 爆量，閘門就要生效——用all()會被「非首次」的來源拖累，誤判成不需要
     # 限制(實測踩過，導致大量歷史文章未經篩選全部送進Gemini)。
-    is_first_run = any(
-        db.count_items_for_source(source_id) == 0
-        for source_id, _, _ in feeds
-    )
+    is_first_run = any(db.count_items_for_source(source_id) == 0 for source_id in source_ids)
 
-    raw_items = substack_generic.fetch_all(feeds)
+    normalize_fn = config["normalize_fn"]
+    summarize_fn = config["summarize_fn"]
+    raw_items = config["fetch_fn"]()
 
     seen_sources = set()
     new_items = []
     archived_only_count = 0
     for raw in raw_items:
-        source_id = raw["source_id"]
+        norm = normalize_fn(raw)
+        source_id = norm["source_id"]
         if source_id not in seen_sources:
-            db.upsert_source(source_id, raw["source_name"], "digest", raw["url"])
+            db.upsert_source(source_id, norm["source_name"], "digest", norm["url"])
             seen_sources.add(source_id)
 
+        # summary先用None插入(比照既有run_source()的模式)：dedup/日期/首次
+        # 執行閘門判斷完全不需要summary，只有「真的要用」的項目才值得花運算
+        # 資源算摘要(detail頁請求+抽取式摘要對tsmc/cbc是有成本的操作)。
         item = db.insert_item_if_new(
             source_id=source_id,
-            title=raw["title"],
-            summary=raw.get("summary"),
-            url=raw["url"],
-            published_at=raw.get("published_at"),
+            title=norm["title"],
+            summary=None,
+            url=norm["url"],
+            published_at=norm.get("published_at"),
         )
         if item is None:
             continue
 
-        if not _is_today_in_taiwan(raw.get("published_at")):
+        if not _is_today_in_taiwan(norm.get("published_at")):
             db.mark_stale_not_today(item["item_id"])
             continue
 
@@ -606,7 +691,10 @@ def run_digest_channel(key: str):
             archived_only_count += 1
             continue
 
-        item["source_name"] = raw["source_name"]
+        summary = summarize_fn(raw) or "（無摘要，請點擊標題查看原文）"
+        db.update_summary(item["item_id"], summary)
+        item["summary"] = summary
+        item["source_name"] = norm["source_name"]
         new_items.append(item)
 
     if not new_items:

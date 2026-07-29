@@ -1,5 +1,5 @@
 # crontab -e 貼入以下內容（依實際路徑與 python 虛擬環境調整）
-# 週報頻率：每週一早上 8:00 跑全部 4 個核心來源
+# 週報頻率：每週一早上 8:00 跑核心即時來源（tsmc/cbc已改晚間彙整，不在此清單）
 0 8 * * 1 cd /opt/intel-pusher && /opt/intel-pusher/venv/bin/python main.py --source all >> /opt/intel-pusher/logs/cron.log 2>&1
 
 # Fed 有 FOMC 會議時效性較高，額外在每個工作日早上跑一次，
@@ -11,15 +11,21 @@
 # 每天自然產生新項目，不會因為跟每週all重疊而漏推或重複推。
 0 9 * * 1-5 cd /opt/intel-pusher && /opt/intel-pusher/venv/bin/python main.py --source macro_fred >> /opt/intel-pusher/logs/cron.log 2>&1
 
-# 美股送分題(Substack)發文沒有固定頻率，用每日檢查+去重確保當天有新文章
-# 就推、沒有就靜默跳過，不需要額外的時間判斷邏輯
-0 9 * * * cd /opt/intel-pusher && /opt/intel-pusher/venv/bin/python main.py --source substack_easypoint >> /opt/intel-pusher/logs/cron.log 2>&1
-
 # 台積電/中華電財報+月營收(TWSE官方開放資料,免key零風險,每日檢查零成本)。
 # 資料本身是月/季頻更新,但用每日檢查把「公告後多久被抓到」的延遲壓在
 # 一天內,而非隨機落在1~30天之間;去重機制確保沒有新一期資料時不會重複推播。
 0 9 * * * cd /opt/intel-pusher && /opt/intel-pusher/venv/bin/python main.py --source twse_tsmc >> /opt/intel-pusher/logs/cron.log 2>&1
 0 9 * * * cd /opt/intel-pusher && /opt/intel-pusher/venv/bin/python main.py --source twse_chunghwa >> /opt/intel-pusher/logs/cron.log 2>&1
+
+# 晚間彙整頻道(甲類:AI敘事交叉比對)。每天20:00執行，收集當天(台灣時區)
+# 新文章送Gemini做交叉比對彙整後推播，無時效性要求的新聞/評論類來源
+# 都在這裡，tsmc/cbc本來是即時逐篇推播，已改到這裡的晚間彙整(見設計討論)。
+0 20 * * * cd /opt/intel-pusher && /opt/intel-pusher/venv/bin/python main.py --source tsmc_digest >> /opt/intel-pusher/logs/cron.log 2>&1
+0 20 * * * cd /opt/intel-pusher && /opt/intel-pusher/venv/bin/python main.py --source cbc_digest >> /opt/intel-pusher/logs/cron.log 2>&1
+0 20 * * * cd /opt/intel-pusher && /opt/intel-pusher/venv/bin/python main.py --source us_stock_digest >> /opt/intel-pusher/logs/cron.log 2>&1
+0 20 * * * cd /opt/intel-pusher && /opt/intel-pusher/venv/bin/python main.py --source crypto_digest >> /opt/intel-pusher/logs/cron.log 2>&1
+0 20 * * * cd /opt/intel-pusher && /opt/intel-pusher/venv/bin/python main.py --source macro_tech_digest >> /opt/intel-pusher/logs/cron.log 2>&1
+0 20 * * * cd /opt/intel-pusher && /opt/intel-pusher/venv/bin/python main.py --source geopolitics_digest >> /opt/intel-pusher/logs/cron.log 2>&1
 
 # GitHub 自動備份：每日凌晨 3 點執行（加密 PII + commit + push）
 0 3 * * * /opt/intel-pusher/backup.sh >> /opt/intel-pusher/logs/backup.log 2>&1

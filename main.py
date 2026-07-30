@@ -1054,9 +1054,10 @@ def run_meta_summary_channel(key: str):
 
 
 # 模擬持倉(紙上帳戶,使用者確認2026-07-30,見schema.sql同段落註解)：每個
-# 帳戶讀取對應大總結頻道「最近一次」已產出的報告(不限定當天——tw_stock
+# 帳戶讀取對應大總結頻道「最近幾次」已產出的報告(不限定當天——tw_stock
 # 於台股收盤後13:30左右執行,當天晚上20:30才會有tw_stock_meta的新報告,
-# 收盤時點只有前一晚的報告可用,見db.get_latest_summary())，交給AI決定
+# 收盤時點只有前一晚的報告可用,見db.get_recent_summaries()；PAT-15
+# enrichment之後改用這個而非單筆的get_latest_summary())，交給AI決定
 # 進出場，全部是模擬交易，不動用真實資金。3個帳戶各自獨立頻道(使用者
 # 確認2026-07-30)，不共用webhook——避免3個帳戶的動作/持倉訊息混在同一個
 # 頻道裡難以分辨。
@@ -1170,7 +1171,14 @@ def run_portfolio_channel(key: str):
             if match is None:
                 logger.warning("[%s] AI指定平倉的position_id不存在，忽略此動作", key)
                 continue
-            pnl = db.close_position(match["position_id"], match["current_price"], trade_date, a["reasoning"])
+            try:
+                pnl = db.close_position(match["position_id"], match["current_price"], trade_date, a["reasoning"])
+            except ValueError as e:
+                # 防止AI決策JSON意外重複同一筆close動作(見db.close_position()
+                # 的status防呆)導致整個函式崩潰、當次完全不推播——單一動作
+                # 失敗只跳過該動作,不影響同一批次其餘動作跟最終推播。
+                logger.warning("[%s] 平倉失敗，忽略此動作：%s", key, e)
+                continue
             action_lines.append(
                 f"• 平倉 {match['symbol']}（現價{match['current_price']:g}）"
                 f" 已實現損益{pnl:+,.2f}：{a['reasoning']}"

@@ -180,20 +180,6 @@ def record_fetch_failure(source_id: str) -> int:
     return row["fail_count"] if row else 0
 
 
-def get_latest_summary(source_id: str) -> str | None:
-    """依source_id取回最近一筆的summary,不限定日期(供台股模擬持倉在
-    13:30收盤後執行時讀取——當天的tw_stock_meta報告要等晚間20:30才產出,
-    收盤時點只有前一晚的報告可用,仍具參考價值,故不像get_summary_for_date
-    那樣要求精確比對published_at)。"""
-    conn = get_conn()
-    row = conn.execute(
-        "SELECT summary FROM item WHERE source_id=? ORDER BY fetched_at DESC LIMIT 1",
-        (source_id,),
-    ).fetchone()
-    conn.close()
-    return row["summary"] if row else None
-
-
 # ── 模擬持倉(紙上帳戶) ──
 # PnL公式(已核對):
 #   margin_used = avg_cost * quantity / leverage  (開倉時從current_cash扣除的金額)
@@ -275,6 +261,13 @@ def close_position(position_id: str, price: float, trade_date: str, reasoning: s
     if pos is None:
         conn.close()
         raise ValueError(f"position_id不存在: {position_id}")
+    if pos["status"] != "open":
+        # 防止對同一個position_id重複平倉(例如AI決策JSON意外重複同一筆
+        # close動作)導致margin_used+pnl被重複加回current_cash、現金餘額
+        # 灌水失真——2026-07-30自我檢討時發現的真實風險，即使呼叫端目前
+        # 沒有已知的重複呼叫路徑，這裡仍加上防呆，不能只靠呼叫端小心。
+        conn.close()
+        raise ValueError(f"position_id={position_id} 狀態為'{pos['status']}',不是'open',拒絕重複平倉")
 
     margin_used = pos["avg_cost"] * pos["quantity"] / pos["leverage"]
     if pos["side"] == "short":

@@ -101,3 +101,46 @@ def build_digest_embeds(digest: dict, channel_title: str, date_str: str) -> tupl
         embeds[-1]["footer"] = {"text": footer_note}
 
     return embeds, omitted_count
+
+
+def build_portfolio_embed(channel_title: str, date_str: str, portfolio: dict,
+                           positions: list[dict], action_lines: list[str]) -> dict:
+    """模擬持倉頻道的訊息組裝。跟build_digest_embeds()不同——內容量本身有界
+    (持倉數/今日動作數都不會失控成百筆)，不需要2則訊息的分頁邏輯，只做
+    單一embed的欄位長度保險截斷。"""
+    total_value = portfolio["current_cash"] + sum(p.get("market_value", 0) for p in positions)
+    starting = portfolio["starting_capital"]
+    return_pct = (total_value - starting) / starting * 100 if starting else 0.0
+
+    overview = (
+        f"總資產:{total_value:,.2f} {portfolio['currency']}"
+        f"(起始本金{starting:,.2f}，累計報酬率{return_pct:+.1f}%)\n"
+        f"可用現金:{portfolio['current_cash']:,.2f} {portfolio['currency']}"
+    )
+
+    fields = []
+    if action_lines:
+        value = "\n".join(action_lines)
+        if len(value) > FIELD_VALUE_MAX:
+            value = value[: FIELD_VALUE_MAX - 6].rstrip() + "…(略)"
+        fields.append({"name": "今日動作", "value": value})
+
+    if positions:
+        pos_lines = [
+            f"• {p['symbol']} {p['side']} 數量{p['quantity']:g} 均價{p['avg_cost']:g}"
+            f" 現價{p.get('current_price', '?')} 未實現損益{p.get('unrealized_pnl', 0):+,.2f}"
+            for p in positions
+        ]
+        value = "\n".join(pos_lines)
+        if len(value) > FIELD_VALUE_MAX:
+            value = value[: FIELD_VALUE_MAX - 6].rstrip() + "…(略)"
+        fields.append({"name": "目前持倉", "value": value})
+    else:
+        fields.append({"name": "目前持倉", "value": "(空手)"})
+
+    return {
+        "title": f"{channel_title} — {date_str}"[:256],
+        "description": overview[:DESC_MAX],
+        "fields": fields,
+        "color": 15105570,
+    }

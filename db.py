@@ -178,3 +178,133 @@ def record_fetch_failure(source_id: str) -> int:
     row = conn.execute("SELECT fail_count FROM source WHERE source_id=?", (source_id,)).fetchone()
     conn.close()
     return row["fail_count"] if row else 0
+
+
+def get_latest_summary(source_id: str) -> str | None:
+    """依source_id取回最近一筆的summary,不限定日期(供台股模擬持倉在
+    13:30收盤後執行時讀取——當天的tw_stock_meta報告要等晚間20:30才產出,
+    收盤時點只有前一晚的報告可用,仍具參考價值,故不像get_summary_for_date
+    那樣要求精確比對published_at)。"""
+    conn = get_conn()
+    row = conn.execute(
+        "SELECT summary FROM item WHERE source_id=? ORDER BY fetched_at DESC LIMIT 1",
+        (source_id,),
+    ).fetchone()
+    conn.close()
+    return row["summary"] if row else None
+
+
+# ── 模擬持倉(紙上帳戶) ──
+# PnL公式(已核對):
+#   margin_used = avg_cost * quantity / leverage  (開倉時從current_cash扣除的金額)
+#   long  unrealized_pnl = (price - avg_cost) * quantity
+#   short unrealized_pnl = (avg_cost - price) * quantity
+#   平倉時歸還 current_cash += margin_used + pnl
+# leverage=1時margin_used等於全額本金,跟現貨/台股語意一致。
+
+PORTFOLIO_SEEDS = [
+    ("tw_stock", "台股模擬帳戶", "TWD", 1000.0),
+    ("crypto_futures", "幣圈合約模擬帳戶", "USDT", 100.0),
+    ("crypto_discretionary", "幣圈自主判斷模擬帳戶", "USDT", 100.0),
+]
+
+
+def init_portfolios():
+    """冪等：3個模擬帳戶第一次執行時建立初始本金,已存在則不覆寫
+    current_cash(避免每次啟動把已經在跑的模擬倉位本金重置回起始值)。"""
+    conn = get_conn()
+    now = datetime.now(timezone.utc).isoformat()
+    for portfolio_id, name, currency, starting_capital in PORTFOLIO_SEEDS:
+        conn.execute(
+            """INSERT INTO portfolio (portfolio_id, name, currency, starting_capital, current_cash, created_at)
+               VALUES (?, ?, ?, ?, ?, ?)
+               ON CONFLICT(portfolio_id) DO NOTHING""",
+            (portfolio_id, name, currency, starting_capital, starting_capital, now),
+        )
+    conn.commit()
+    conn.close()
+
+
+def get_portfolio(portfolio_id: str) -> dict | None:
+    conn = get_conn()
+    row = conn.execute("SELECT * FROM portfolio WHERE portfolio_id=?", (portfolio_id,)).fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def get_open_positions(portfolio_id: str) -> list[dict]:
+    conn = get_conn()
+    rows = conn.execute(
+        "SELECT * FROM position WHERE portfolio_id=? AND status='open' ORDER BY opened_at",
+        (portfolio_id,),
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def open_position(portfolio_id: str, symbol: str, side: str, quantity: float,
+                   avg_cost: float, leverage: float, trade_date: str, reasoning: str) -> str:
+    """開倉：從current_cash扣除margin_used,寫入position+trade_log。"""
+    margin_used = avg_cost * quantity / leverage
+    position_id = str(uuid.uuid4())
+    now = datetime.now(timezone.utc).isoformat()
+    conn = get_conn()
+    conn.execute(
+        """INSERT INTO position (position_id, portfolio_id, symbol, quantity, avg_cost, leverage, side, opened_at, status)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'open')""",
+        (position_id, portfolio_id, symbol, quantity, avg_cost, leverage, side, now),
+    )
+    conn.execute(
+        "UPDATE portfolio SET current_cash = current_cash - ? WHERE portfolio_id=?",
+        (margin_used, portfolio_id),
+    )
+    conn.execute(
+        """INSERT INTO trade_log (portfolio_id, trade_date, action, symbol, quantity, price, reasoning, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+        (portfolio_id, trade_date, f"open_{side}", symbol, quantity, avg_cost, reasoning, now),
+    )
+    conn.commit()
+    conn.close()
+    return position_id
+
+
+def close_position(position_id: str, price: float, trade_date: str, reasoning: str) -> float:
+    """平倉：歸還margin_used+pnl給current_cash,回傳這筆realized_pnl。"""
+    conn = get_conn()
+    pos = conn.execute("SELECT * FROM position WHERE position_id=?", (position_id,)).fetchone()
+    if pos is None:
+        conn.close()
+        raise ValueError(f"position_id不存在: {position_id}")
+
+    margin_used = pos["avg_cost"] * pos["quantity"] / pos["leverage"]
+    if pos["side"] == "short":
+        pnl = (pos["avg_cost"] - price) * pos["quantity"]
+    else:
+        pnl = (price - pos["avg_cost"]) * pos["quantity"]
+
+    now = datetime.now(timezone.utc).isoformat()
+    conn.execute("UPDATE position SET status='closed' WHERE position_id=?", (position_id,))
+    conn.execute(
+        "UPDATE portfolio SET current_cash = current_cash + ? WHERE portfolio_id=?",
+        (margin_used + pnl, pos["portfolio_id"]),
+    )
+    conn.execute(
+        """INSERT INTO trade_log (portfolio_id, trade_date, action, symbol, quantity, price, reasoning, created_at)
+           VALUES (?, ?, 'close', ?, ?, ?, ?, ?)""",
+        (pos["portfolio_id"], trade_date, pos["symbol"], pos["quantity"], price, reasoning, now),
+    )
+    conn.commit()
+    conn.close()
+    return pnl
+
+
+def record_hold(portfolio_id: str, trade_date: str, reasoning: str):
+    now = datetime.now(timezone.utc).isoformat()
+    conn = get_conn()
+    conn.execute(
+        """INSERT INTO trade_log (portfolio_id, trade_date, action, reasoning, created_at)
+           VALUES (?, ?, 'hold_update', ?, ?)""",
+        (portfolio_id, trade_date, reasoning, now),
+    )
+    conn.commit()
+    conn.close()

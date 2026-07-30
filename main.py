@@ -37,6 +37,7 @@ from dotenv import load_dotenv
 
 import ai_insight
 import db
+import price_feed
 import summarizer_en
 import summarizer_zh
 import notify_telegram
@@ -868,11 +869,181 @@ def run_meta_summary_channel(key: str):
             f"（另有{omitted_count}則重點因篇幅省略）" if omitted_count else "",
         )
 
+        # 存檔這次大總結的完整文字,供模擬持倉頻道(run_portfolio_channel)
+        # 之後讀取「今天(或最近一次)的大總結研判內容」——比照
+        # run_digest_channel()對digest_report.*的既有持久化模式。
+        report_text = summary["overview"] + "\n\n" + "\n".join(
+            f"【{p['category']}】{p['point']}" for p in summary["points"]
+        )
+        report_source_id = f"digest_report.{key}"
+        db.upsert_source(report_source_id, f"{config['channel_title']}彙整存檔", "digest_report", "")
+        saved = db.insert_item_if_new(
+            source_id=report_source_id,
+            title=f"{config['channel_title']} 彙整（{today_str}）",
+            summary=report_text,
+            url=webhook_url,
+            published_at=today_str,
+        )
+        if saved:
+            db.mark_published(saved["item_id"])
+
+
+# 模擬持倉(紙上帳戶,使用者確認2026-07-30,見schema.sql同段落註解)：每個
+# 帳戶讀取對應大總結頻道「最近一次」已產出的報告(不限定當天——tw_stock
+# 於台股收盤後13:30左右執行,當天晚上20:30才會有tw_stock_meta的新報告,
+# 收盤時點只有前一晚的報告可用,見db.get_latest_summary())，交給AI決定
+# 進出場，全部是模擬交易，不動用真實資金。
+PORTFOLIO_CHANNELS = {
+    "tw_stock_portfolio": {
+        "portfolio_id": "tw_stock",
+        "webhook_env": "WEBHOOK_PORTFOLIO",
+        "channel_title": "模擬持倉－台股",
+        "meta_source_id": "digest_report.tw_stock_meta",
+        "angle": "台股現貨帳戶,只能做多(side必須是long),leverage固定為1,不可放空。",
+    },
+    "crypto_futures_portfolio": {
+        "portfolio_id": "crypto_futures",
+        "webhook_env": "WEBHOOK_PORTFOLIO",
+        "channel_title": "模擬持倉－幣圈合約",
+        "meta_source_id": "digest_report.crypto_meta",
+        "angle": "幣圈合約帳戶,可做多可做空(side可為long或short),可使用槓桿"
+                 "(leverage可大於1,但務必評估清算風險,不要無節制放大槓桿)。",
+    },
+    "crypto_discretionary_portfolio": {
+        "portfolio_id": "crypto_discretionary",
+        "webhook_env": "WEBHOOK_PORTFOLIO",
+        "channel_title": "模擬持倉－幣圈自主判斷",
+        "meta_source_id": "digest_report.crypto_meta",
+        "angle": "幣圈現貨帳戶,只能做多(side必須是long),leverage固定為1,不可放空、不可用槓桿。",
+    },
+}
+
+
+def _price_with_pnl(position: dict) -> dict | None:
+    """幫position補上current_price/unrealized_pnl/market_value,查價失敗
+    回傳None,呼叫端須整批放棄本次執行——缺價無法正確算PnL,不可用avg_cost
+    或0頂替(會讓數字失真,違反PnL公式須先核對的規則)。"""
+    price = price_feed.get_price(position["symbol"])
+    if price is None:
+        return None
+    margin_used = position["avg_cost"] * position["quantity"] / position["leverage"]
+    if position["side"] == "short":
+        pnl = (position["avg_cost"] - price) * position["quantity"]
+    else:
+        pnl = (price - position["avg_cost"]) * position["quantity"]
+    return {
+        **position,
+        "current_price": price,
+        "unrealized_pnl": pnl,
+        "market_value": margin_used + pnl,
+    }
+
+
+def run_portfolio_channel(key: str):
+    """模擬持倉頻道：讀取對應大總結報告+目前持倉現價，交給AI決定進出場，
+    實際執行(寫db.trade_log/position/portfolio.current_cash)後推播今日
+    動作+目前持倉摘要。任一步驟失敗(缺webhook/缺報告/查價失敗/Gemini失敗)
+    一律整批跳過，不半套執行——避免「AI決定要交易但價格查不到」這種
+    半吊子狀態寫進trade_log。"""
+    config = PORTFOLIO_CHANNELS[key]
+    portfolio_id = config["portfolio_id"]
+
+    webhook_url = os.getenv(config["webhook_env"])
+    if not webhook_url:
+        logger.error("[%s] 缺少環境變數 %s，跳過", key, config["webhook_env"])
+        return
+
+    db.init_portfolios()
+    portfolio = db.get_portfolio(portfolio_id)
+    report_text = db.get_latest_summary(config["meta_source_id"])
+    if not report_text:
+        logger.info("[%s] 尚無可用的大總結報告，跳過", key)
+        return
+
+    raw_positions = db.get_open_positions(portfolio_id)
+    positions = []
+    for p in raw_positions:
+        priced = _price_with_pnl(p)
+        if priced is None:
+            logger.error("[%s] %s 查無現價，本次跳過整個帳戶", key, p["symbol"])
+            return
+        positions.append(priced)
+
+    decision = ai_insight.build_trade_decision(config["angle"], portfolio, positions, report_text)
+    if not decision:
+        logger.error("[%s] Gemini決策失敗（額度用盡/網路錯誤/回應格式不對），本次跳過", key)
+        return
+
+    trade_date = datetime.now().strftime("%Y-%m-%d")
+    is_crypto_futures = portfolio_id == "crypto_futures"
+    action_lines = []
+
+    for a in decision["actions"]:
+        if a["action"] == "hold":
+            db.record_hold(portfolio_id, trade_date, a["reasoning"] or "(無說明)")
+            if a["symbol"]:
+                action_lines.append(f"• 持有 {a['symbol']}：{a['reasoning']}")
+            continue
+
+        if a["action"] == "close":
+            match = next((p for p in positions if p["position_id"] == a["position_id"]), None)
+            if match is None:
+                logger.warning("[%s] AI指定平倉的position_id不存在，忽略此動作", key)
+                continue
+            pnl = db.close_position(match["position_id"], match["current_price"], trade_date, a["reasoning"])
+            action_lines.append(
+                f"• 平倉 {match['symbol']}（現價{match['current_price']:g}）"
+                f" 已實現損益{pnl:+,.2f}：{a['reasoning']}"
+            )
+            continue
+
+        if a["action"] == "open":
+            if not a["symbol"] or a["cash_ratio"] <= 0:
+                continue
+            side = a["side"] if is_crypto_futures and a["side"] in ("long", "short") else "long"
+            leverage = a["leverage"] if is_crypto_futures and a["leverage"] > 1 else 1.0
+            price = price_feed.get_price(a["symbol"])
+            if price is None or price <= 0:
+                logger.warning("[%s] %s 查無現價，忽略此開倉動作", key, a["symbol"])
+                continue
+
+            fresh_cash = db.get_portfolio(portfolio_id)["current_cash"]
+            cash_ratio = min(a["cash_ratio"], 1.0)
+            margin_used = fresh_cash * cash_ratio
+            if margin_used <= 0:
+                continue
+            quantity = margin_used * leverage / price
+            db.open_position(portfolio_id, a["symbol"], side, quantity, price, leverage, trade_date, a["reasoning"])
+            action_lines.append(
+                f"• 開倉 {a['symbol']} {side} 數量{quantity:g}（價{price:g}，"
+                f"槓桿{leverage:g}x，動用現金{margin_used:,.2f}）：{a['reasoning']}"
+            )
+
+    portfolio = db.get_portfolio(portfolio_id)
+    final_positions = []
+    for p in db.get_open_positions(portfolio_id):
+        priced = _price_with_pnl(p)
+        # 交易已經執行完了,查價失敗只影響報告顯示,不能因此不推播——
+        # 用avg_cost頂替current_price純粹是顯示用途(market_value退回margin_used,
+        # 不假裝算得出unrealized_pnl),不影響db裡任何已寫入的數字。
+        final_positions.append(priced if priced is not None else {
+            **p, "current_price": "?", "unrealized_pnl": 0,
+            "market_value": p["avg_cost"] * p["quantity"] / p["leverage"],
+        })
+
+    embed = digest_format.build_portfolio_embed(config["channel_title"], trade_date, portfolio, final_positions, action_lines)
+    ok, status, err = send_webhook(webhook_url, embed)
+    if ok:
+        logger.info("[%s] 推播成功，%d 個動作、%d 筆持倉", key, len(action_lines), len(final_positions))
+    else:
+        logger.error("[%s] 推播失敗：HTTP %s %s", key, status, err)
+
 
 def main():
     parser = argparse.ArgumentParser(description="本地爬蟲 → Discord Webhook 推播")
     parser.add_argument("--source", choices=list(SOURCE_REGISTRY.keys()) + ["all"]
-                                     + list(DIGEST_CHANNELS.keys()) + list(META_SUMMARY_CHANNELS.keys()),
+                                     + list(DIGEST_CHANNELS.keys()) + list(META_SUMMARY_CHANNELS.keys())
+                                     + list(PORTFOLIO_CHANNELS.keys()),
                         help="執行單一來源（與 --scholarship 二選一）")
     parser.add_argument("--scholarship", action="store_true",
                         help="批次執行所有獎學金來源")
@@ -892,6 +1063,8 @@ def main():
         run_digest_channel(args.source)
     elif args.source in META_SUMMARY_CHANNELS:
         run_meta_summary_channel(args.source)
+    elif args.source in PORTFOLIO_CHANNELS:
+        run_portfolio_channel(args.source)
     elif args.source == "all":
         for key in SOURCE_REGISTRY:
             run_source(key)

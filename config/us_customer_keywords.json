@@ -1,0 +1,29 @@
+{
+  "_comment": "美股客戶(Apple/NVIDIA/AMD/Broadcom)新聞稿關鍵字過濾。這些公司feed絕大多數是一般企業新聞(產品發表/娛樂內容/行銷)，只留跟晶片產能/代工/半導體/台灣生態系投資相關的項目，避免半導體供應鏈頻道被無關新聞淹沒(2026-07-30實測發現，Apple 20則裡只有1則跟晶片有關)。2026-07-30 B+E校準：用4家feed當時共59則實測樣本人工判讀，找出漏抓的4則真陽性(Apple/Broadcom晶片支出、Wistron設廠、AMD台灣生態系投資、OpenAI/Broadcom客製晶片)，據此擴充關鍵字。刻意不加'processor'/'GPU'/'AI'裸字——樣本顯示會連帶抓進Microsoft/Anthropic等單純AI部署合作新聞(用了晶片但不是晶片供應鏈本身的新聞)，違背B+E要保留的精準度底線。",
+  "weights": {
+    "TSMC": 3,
+    "Taiwan Semiconductor": 3,
+    "semiconductor": 2,
+    "foundry": 3,
+    "wafer": 2,
+    "chip": 2,
+    "custom silicon": 2,
+    "ASIC": 2,
+    "intelligence processor": 2,
+    "manufacturing plant": 2,
+    "production ramp": 2,
+    "Taiwan": 2,
+    "Wistron": 2,
+    "Foxconn": 2,
+    "Hon Hai": 2,
+    "Pegatron": 2,
+    "Quanta": 2,
+    "Arizona fab": 2
+  },
+  "regex_weights": {
+    "\\bN[2-5]\\b": 2,
+    "\\b[2-5]nm\\b": 2,
+    "\\bfab\\b": 2
+  },
+  "threshold": 2
+}

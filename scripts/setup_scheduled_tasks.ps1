@@ -30,6 +30,34 @@ function New-IntelPusherFlagTask {
     }
 }
 
+# 晚間彙整頻道(20:00,tw_stock_meta/crypto_meta的前置依賴)。2026-07-30
+# 發現這6個從專案初期就存在的頻道從來沒有被排程過(crontab.example移除
+# 時漏補到Task Scheduler)，導致tw_stock_meta/crypto_meta讀到的一直是
+# 舊資料——見Meta_Dev_Knowledge.md相關記錄。
+New-IntelPusherTask -Name 'IntelPusher-TsmcDigest' -Source 'tsmc_digest' `
+    -Trigger (New-ScheduledTaskTrigger -Daily -At 8:00PM)
+New-IntelPusherTask -Name 'IntelPusher-CbcDigest' -Source 'cbc_digest' `
+    -Trigger (New-ScheduledTaskTrigger -Daily -At 8:00PM)
+New-IntelPusherTask -Name 'IntelPusher-UsStockDigest' -Source 'us_stock_digest' `
+    -Trigger (New-ScheduledTaskTrigger -Daily -At 8:00PM)
+New-IntelPusherTask -Name 'IntelPusher-CryptoDigest' -Source 'crypto_digest' `
+    -Trigger (New-ScheduledTaskTrigger -Daily -At 8:00PM)
+New-IntelPusherTask -Name 'IntelPusher-MacroTechDigest' -Source 'macro_tech_digest' `
+    -Trigger (New-ScheduledTaskTrigger -Daily -At 8:00PM)
+New-IntelPusherTask -Name 'IntelPusher-GeopoliticsDigest' -Source 'geopolitics_digest' `
+    -Trigger (New-ScheduledTaskTrigger -Daily -At 8:00PM)
+New-IntelPusherFlagTask -Name 'IntelPusher-Scholarship' -Flag 'scholarship' `
+    -Trigger (New-ScheduledTaskTrigger -Daily -At 8:00PM)
+
+# 官方每日開放資料來源(同樣是crontab.example移除時漏補的既有功能，
+# 9:00比照原本crontab.example的時間)。
+New-IntelPusherTask -Name 'IntelPusher-MacroFred' -Source 'macro_fred' `
+    -Trigger (New-ScheduledTaskTrigger -Weekly -DaysOfWeek Monday,Tuesday,Wednesday,Thursday,Friday -At 9:00AM)
+New-IntelPusherTask -Name 'IntelPusher-TwseTsmc' -Source 'twse_tsmc' `
+    -Trigger (New-ScheduledTaskTrigger -Daily -At 9:00AM)
+New-IntelPusherTask -Name 'IntelPusher-TwseChunghwa' -Source 'twse_chunghwa' `
+    -Trigger (New-ScheduledTaskTrigger -Daily -At 9:00AM)
+
 # 大總結頻道(20:30,晚間彙整之後)
 New-IntelPusherTask -Name 'IntelPusher-TwStockMeta' -Source 'tw_stock_meta' `
     -Trigger (New-ScheduledTaskTrigger -Daily -At 8:30PM)

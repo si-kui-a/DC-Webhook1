@@ -1153,9 +1153,16 @@ def run_portfolio_channel(key: str):
 
     for a in decision["actions"]:
         if a["action"] == "hold":
-            db.record_hold(portfolio_id, trade_date, a["reasoning"] or "(無說明)")
+            reasoning = a["reasoning"] or "(無說明)"
+            db.record_hold(portfolio_id, trade_date, reasoning)
+            # 不管有沒有綁定特定標的都要顯示理由——原本只在有symbol時才加進
+            # action_lines，導致「整體觀望、不特定標的」這種hold的理由被
+            # 寫進db卻不會出現在Discord訊息裡，使用者只看到「0個動作」卻
+            # 不知道AI為什麼不動作(2026-07-30發現)。
             if a["symbol"]:
-                action_lines.append(f"• 持有 {a['symbol']}：{a['reasoning']}")
+                action_lines.append(f"• 持有 {a['symbol']}：{reasoning}")
+            else:
+                action_lines.append(f"• 觀望：{reasoning}")
             continue
 
         if a["action"] == "close":

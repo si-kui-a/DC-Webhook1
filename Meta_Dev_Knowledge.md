@@ -403,3 +403,43 @@ API不支援伺服器端關鍵字/offset篩選，固定回傳最新1000筆全國
 關鍵字過濾結果，不整批放棄推播——AI是精準度加強層，不是必要閘門，這層
 失敗不該讓整個頻道停擺(比照本專案其餘AI功能「失敗就退回較保守的既有
 邏輯」的一貫模式)。
+
+### [PAT-19] 6個晚間彙整頻道從未被排程過(2026-07-30發現)
+**背景**：使用者質疑「日報是不是沒有跑通」，查`work/activity.log`發現
+`tsmc_digest`/`cbc_digest`/`us_stock_digest`/`crypto_digest`/
+`macro_tech_digest`/`geopolitics_digest`這6個從專案初期就存在的頻道，
+最後一次執行是2026-07-29深夜到2026-07-30凌晨(開發測試時手動跑的)，
+`Get-ScheduledTask`確認Windows Task Scheduler裡完全沒有註冊這6個。
+`macro_fred`/`twse_tsmc`/`twse_chunghwa`這3個原本`crontab.example`裡
+daily 9am的項目也一樣缺排程。
+
+**根因**：PAT-14移除`crontab.example`(那份文件對應的是從未真的部署過的
+Linux主機)、改建`scripts/setup_scheduled_tasks.ps1`時，只針對「這個
+session正在新增的功能」(模擬持倉/大總結/實習頻道)建了排程，沒有回頭
+把`crontab.example`原本涵蓋的舊功能也一併遷移過去——導致這9個排程
+「表面上被crontab.example文件記錄過」，但實際上從來沒有在任何真正的
+排程機制(不管是虛構的Linux cron還是真實的Windows Task Scheduler)裡
+自動執行過。**教訓**：移除一份舊排程文件時，要逐條核對每一項功能都有
+對應的新排程，不能只顧著新增的部分。
+
+**修復**：`scripts/setup_scheduled_tasks.ps1`補上這9個工作(6個晚間彙整
+20:00 + macro_fred平日9:00 + twse_tsmc/twse_chunghwa每日9:00)，已執行
+並用`Get-ScheduledTask`確認全部18個IntelPusher-*工作都在。
+
+**同類疑似缺口(未修復，待使用者決定)**：`main.py`有`--scholarship`
+批次模式(`run_scholarship()`)，但`IntelPusher-Scholarship`同樣不存在於
+排程清單——不確定使用者是否刻意手動觸發，未擅自新增排程。
+
+### [PAT-20] 模擬持倉「觀望不動作」的理由曾被吞掉
+**背景**：使用者發現Discord訊息只顯示「0個動作」，看不到AI為什麼決定
+不動作。`run_portfolio_channel()`原本的hold分支只在`a["symbol"]`非空時
+才把理由加進`action_lines`，但AI對「整體觀望、沒有特定標的」的hold
+決策通常不會填symbol，導致理由寫進了`db.trade_log`卻不會出現在Discord
+訊息裡——使用者看到的畫面等於「什麼都沒發生」，但AI其實有做判斷、
+只是沒被看見。
+
+**修復**：不論`a["symbol"]`是否為空都要把理由加進`action_lines`，只是
+文案不同(有標的用「持有 {symbol}」，沒有就用「觀望」)。**強制規則**：
+任何AI決策結果(不只hold)都必須在推播訊息裡呈現理由，不能因為「這個
+分支剛好沒有一個明顯的顯示欄位」就讓理由消失——使用者需要知道「為什麼
+不動作」跟「為什麼動作」一樣重要。

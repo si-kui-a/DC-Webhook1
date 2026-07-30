@@ -301,15 +301,26 @@ def build_meta_summary(angle: str, channel_reports: list[dict]) -> dict | None:
 
 # ── 模擬持倉(紙上帳戶)進出場決策 ──
 
-def build_trade_decision(angle: str, portfolio: dict, positions: list[dict], report_text: str) -> dict | None:
+def build_trade_decision(angle: str, portfolio: dict, positions: list[dict],
+                          recent_trades: list[dict], recent_reports: list[dict]) -> dict | None:
     """
     輸入:
       angle      -> 這個帳戶的操作風格/限制描述(見main.py PORTFOLIO_CHANNELS)
       portfolio  -> db.get_portfolio()回傳的dict(current_cash/currency/starting_capital)
       positions  -> list[dict],每筆為db.get_open_positions()的欄位再加上
                     current_price/unrealized_pnl(main.py用price_feed查完價格
-                    先算好才傳進來,本函式不查價、不算PnL,只讀結果)
-      report_text -> 今天(或最近一次)該類資產大總結頻道已產出的報告全文
+                    先算好才傳進來,本函式不查價、不算PnL,只讀結果)。若
+                    main.py有另外查到技術指標(見price_feed.get_technical_
+                    snapshot()),也會附在同一個dict裡(sma5/sma20/
+                    change_5d_pct/change_20d_pct,查無資料則缺該欄位)。
+      recent_trades  -> db.get_recent_trades()回傳的近期交易紀錄,讓AI參考
+                        「上次類似情況做過什麼、結果如何」，不是每次都從
+                        零判斷(可為空list,代表尚無歷史)
+      recent_reports -> db.get_recent_summaries()回傳的近幾天報告,讓AI比對
+                        「這幾天報告怎麼變化」的趨勢，不只看今天單一天的
+                        截面(呼叫端須確保至少有1筆,不可為空——沒有報告
+                        代表沒有判斷依據,應由main.py在呼叫前就跳過,不是
+                        靠這裡防呆)
 
     回傳 {"actions": [...]} 或 None(任何失敗情況,呼叫端沿用「這次先不動作」)。
     action欄位:
@@ -322,12 +333,35 @@ def build_trade_decision(angle: str, portfolio: dict, positions: list[dict], rep
     if not api_key:
         return None
 
-    positions_text = "\n".join(
-        f"- position_id={p['position_id']} {p['symbol']} {p['side']} "
-        f"數量{p['quantity']} 均價{p['avg_cost']} 現價{p.get('current_price')} "
-        f"未實現損益{p.get('unrealized_pnl')}"
-        for p in positions
-    ) or "(目前無持倉)"
+    def _fmt_position(p: dict) -> str:
+        line = (
+            f"- position_id={p['position_id']} {p['symbol']} {p['side']} "
+            f"數量{p['quantity']} 均價{p['avg_cost']} 現價{p.get('current_price')} "
+            f"未實現損益{p.get('unrealized_pnl')}"
+        )
+        if "sma5" in p or "sma20" in p:
+            tech_bits = []
+            if "sma5" in p:
+                tech_bits.append(f"5日均價{p['sma5']:.4g}(5日漲跌{p.get('change_5d_pct', 0):+.1f}%)")
+            if "sma20" in p:
+                tech_bits.append(f"20日均價{p['sma20']:.4g}(20日漲跌{p.get('change_20d_pct', 0):+.1f}%)")
+            line += "，技術面：" + "、".join(tech_bits)
+        return line
+
+    positions_text = "\n".join(_fmt_position(p) for p in positions) or "(目前無持倉)"
+
+    trades_text = "\n".join(
+        f"- {t['trade_date']} {t['action']}"
+        + (f" {t['symbol']}" if t.get("symbol") else "")
+        + (f" 價{t['price']:g}" if t.get("price") is not None else "")
+        + f"：{t['reasoning'] or '(無說明)'}"
+        for t in reversed(recent_trades)
+    ) or "(尚無歷史交易紀錄)"
+
+    reports_text = "\n\n".join(
+        f"[{r['published_at']}的報告]\n{r['summary']}"
+        for r in reversed(recent_reports)
+    )
 
     prompt = (
         "你是操作一個小額紙上模擬帳戶的交易員(全部是模擬,不是真實交易),"
@@ -336,7 +370,8 @@ def build_trade_decision(angle: str, portfolio: dict, positions: list[dict], rep
         f"目前現金(可動用保證金):{portfolio['current_cash']} {portfolio['currency']}\n"
         f"起始本金:{portfolio['starting_capital']} {portfolio['currency']}\n"
         f"目前持倉:\n{positions_text}\n\n"
-        f"今日市場研判報告:\n{report_text}\n\n"
+        f"近期交易紀錄(供參考過去類似情況的判斷與結果,由舊到新):\n{trades_text}\n\n"
+        f"近幾天市場研判報告(由舊到新,可比對趨勢變化):\n{reports_text}\n\n"
         "請針對現有持倉逐一決定「continue持有」或「close平倉」，並可決定是否"
         "開一個或多個新倉位(open)。新倉位的cash_ratio是這筆要動用目前現金的"
         "比例(0~1之間，例如0.3代表動用30%現金)，由你自己依信心程度決定，"

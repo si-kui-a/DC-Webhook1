@@ -298,6 +298,32 @@ def close_position(position_id: str, price: float, trade_date: str, reasoning: s
     return pnl
 
 
+def get_recent_trades(portfolio_id: str, limit: int = 10) -> list[dict]:
+    """回傳這個帳戶最近N筆交易紀錄(open/close/hold_update皆含),由新到舊,
+    供AI決策時參考「上次類似情況做過什麼、結果如何」——純DB查詢,不新增
+    任何API/AI呼叫成本。"""
+    conn = get_conn()
+    rows = conn.execute(
+        "SELECT * FROM trade_log WHERE portfolio_id=? ORDER BY created_at DESC LIMIT ?",
+        (portfolio_id, limit),
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def get_recent_summaries(source_id: str, limit: int = 5) -> list[dict]:
+    """回傳這個來源最近N筆summary(依寫入時間由新到舊),供AI比對「這幾天
+    報告怎麼變化」的趨勢,不只看單一天的截面——同樣是純DB查詢。"""
+    conn = get_conn()
+    rows = conn.execute(
+        "SELECT published_at, summary FROM item WHERE source_id=? "
+        "ORDER BY fetched_at DESC LIMIT ?",
+        (source_id, limit),
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
 def record_hold(portfolio_id: str, trade_date: str, reasoning: str):
     now = datetime.now(timezone.utc).isoformat()
     conn = get_conn()

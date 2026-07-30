@@ -257,7 +257,8 @@ robots.txt 明確禁止自動化收集且點名擋 ClaudeBot）。技術可行�
    讀取「最近一次」(不限定當天)的`tw_stock_meta`報告——見
    `db.get_latest_summary()`，因為當天的新報告要等20:30晚間彙整批次
    才會產出，收盤時點只有前一晚的報告可用。`crypto_futures`/
-   `crypto_discretionary`帳戶每小時執行一次(見`crontab.example`)，
+   `crypto_discretionary`帳戶每小時執行一次(見`scripts/setup_scheduled_tasks.ps1`——
+   本專案實際部署在Windows Task Scheduler上,不是cron,`crontab.example`已移除)，
    即使大總結報告當天未更新，現價變化仍可能觸發平倉/加碼。
 6. **即時價格來源(已實作,2026-07-30)**：`price_feed.get_price()`依symbol
    格式路由——純數字視為台股代號,查`openapi.twse.com.tw/v1/exchangeReport/
@@ -277,5 +278,28 @@ robots.txt 明確禁止自動化收集且點名擋 ClaudeBot）。技術可行�
    平倉歸還`current_cash += margin_used + pnl`。leverage=1時
    margin_used等於全額本金，跟現貨/台股語意一致。
 
-**待辦**：使用者接上`price_feed.py`的實際API後，這個功能才會真正開始
-執行交易；在那之前`*_portfolio` cron job只會安靜跳過，屬預期行為。
+**現狀(2026-07-30更新)**：`price_feed.py`已實作真實API(見PAT-14下方)，
+5個排程工作已在Windows Task Scheduler建立並驗證成功，功能已完整可運作。
+
+### [PAT-14] 本專案實際部署在Windows Task Scheduler，不是cron；crontab.example已移除
+**背景**：`crontab.example`從專案初期就存在，內容是Linux crontab語法、
+路徑寫死`/opt/intel-pusher`，但專案從來沒有真的部署到Linux主機——一直
+是跑在使用者這台Windows機器的工作排程器上(既有`IntelPusher-FedDaily`/
+`IntelPusher-Weekly`/`IntelPusher-Backup`三個工作為證)。2026-07-30這次
+對話裡，AI依`crontab.example`的路徑慣例假設有Linux伺服器、建議SSH部署，
+使用者實際貼到PowerShell執行才發現完全兜不起來，浪費了一輪來回。
+
+**教訓**：不能只憑文件內容(尤其是`*.example`這種可能從沒被驗證過的檔案)
+判斷部署環境，要先用`Get-ScheduledTask`/實際環境查證。已移除
+`crontab.example`，改用`scripts/setup_scheduled_tasks.ps1`(用
+`Register-ScheduledTask`比照既有工作的命名/action模式)作為唯一的排程
+部署方式，且是可執行腳本而非純文件，不會再脫離現實。
+
+**踩過的坑**：`New-ScheduledTaskTrigger`的`-RepetitionDuration`不接受
+`[TimeSpan]::MaxValue`(會產生`P99999999DT23H59M59S`，Task Scheduler判定
+超出範圍而整個Register-ScheduledTask失敗)，要表示「近乎無限期重複」須用
+一個夠大但合法的值，例如`(New-TimeSpan -Days 3650)`(10年)。此外
+`Register-ScheduledTask`預設ErrorAction為Continue，呼叫失敗不會中斷腳本，
+若沒有額外`-ErrorAction Stop`+try/catch，後面的`Write-Output "已建立"`
+還是會執行、產生錯誤的成功訊息——任何類似的「建立/註冊」函式都要包
+try/catch才能讓成功訊息可信。

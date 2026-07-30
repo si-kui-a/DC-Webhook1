@@ -281,11 +281,22 @@ def close_position(position_id: str, price: float, trade_date: str, reasoning: s
         "UPDATE portfolio SET current_cash = current_cash + ? WHERE portfolio_id=?",
         (margin_used + pnl, pos["portfolio_id"]),
     )
-    conn.execute(
-        """INSERT INTO trade_log (portfolio_id, trade_date, action, symbol, quantity, price, reasoning, created_at)
-           VALUES (?, ?, 'close', ?, ?, ?, ?, ?)""",
-        (pos["portfolio_id"], trade_date, pos["symbol"], pos["quantity"], price, reasoning, now),
-    )
+    # pnl欄位2026-07-31新增(ALTER TABLE，待使用者APPROVED後才會真的存在)，
+    # 用try/except容錯：欄位還沒建立前，退化成不存pnl的舊版INSERT，不讓
+    # Kelly功能開發卡住其餘平倉邏輯——遷移生效後這個except分支自然不再
+    # 觸發，不需要額外開關切換。
+    try:
+        conn.execute(
+            """INSERT INTO trade_log (portfolio_id, trade_date, action, symbol, quantity, price, pnl, reasoning, created_at)
+               VALUES (?, ?, 'close', ?, ?, ?, ?, ?, ?)""",
+            (pos["portfolio_id"], trade_date, pos["symbol"], pos["quantity"], price, pnl, reasoning, now),
+        )
+    except sqlite3.OperationalError:
+        conn.execute(
+            """INSERT INTO trade_log (portfolio_id, trade_date, action, symbol, quantity, price, reasoning, created_at)
+               VALUES (?, ?, 'close', ?, ?, ?, ?, ?)""",
+            (pos["portfolio_id"], trade_date, pos["symbol"], pos["quantity"], price, reasoning, now),
+        )
     conn.commit()
     conn.close()
     return pnl
@@ -315,6 +326,54 @@ def get_recent_summaries(source_id: str, limit: int = 5) -> list[dict]:
     ).fetchall()
     conn.close()
     return [dict(r) for r in rows]
+
+
+def get_published_items(source_id: str, limit: int = 50) -> list[dict]:
+    """回傳這個來源狀態為'published'(已判定相關且已推播過)的項目,由新到舊,
+    供履歷比對功能查詢目前有效的實習職缺清單用——只要'published'不要
+    'seeded_historical'/'stale_not_today'等,避免把首次執行閘門省略的舊
+    資料或非當日資料誤當成「目前有效」的職缺。"""
+    conn = get_conn()
+    rows = conn.execute(
+        "SELECT title, summary, url, published_at FROM item "
+        "WHERE source_id=? AND status='published' ORDER BY fetched_at DESC LIMIT ?",
+        (source_id, limit),
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def get_trade_win_stats(portfolio_id: str) -> dict | None:
+    """回傳這個帳戶歷史已平倉交易的勝率統計(供Kelly公式部位建議用)。
+    trade_log.pnl欄位是2026-07-31新增的ALTER TABLE(待APPROVED)，欄位還
+    不存在時捕捉OperationalError回傳None，讓呼叫端自然退化成「歷史樣本
+    不足」的既有分支，不需要另外判斷欄位是否存在。"""
+    conn = get_conn()
+    try:
+        rows = conn.execute(
+            "SELECT pnl FROM trade_log WHERE portfolio_id=? AND action='close' AND pnl IS NOT NULL",
+            (portfolio_id,),
+        ).fetchall()
+    except sqlite3.OperationalError:
+        conn.close()
+        return None
+    conn.close()
+
+    pnls = [r["pnl"] for r in rows]
+    if not pnls:
+        return None
+
+    wins = [p for p in pnls if p > 0]
+    losses = [-p for p in pnls if p < 0]
+    win_rate = len(wins) / len(pnls)
+    avg_win = sum(wins) / len(wins) if wins else 0.0
+    avg_loss = sum(losses) / len(losses) if losses else 0.0
+    return {
+        "sample_size": len(pnls),
+        "win_rate": win_rate,
+        "avg_win": avg_win,
+        "avg_loss": avg_loss,
+    }
 
 
 def record_hold(portfolio_id: str, trade_date: str, reasoning: str):

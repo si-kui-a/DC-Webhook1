@@ -170,10 +170,42 @@ def get_price_history(symbol: str) -> list[float] | None:
     return _get_crypto_history(symbol)
 
 
+def _compute_rsi(history: list[float], period: int = 14) -> float | None:
+    """標準RSI(簡單移動平均版,非Wilder平滑——單次計算、不需要跨批次遞增
+    更新狀態，簡單版對這裡的用途(給AI參考的離散快照)已足夠，不需要
+    Wilder平滑的精確度)。需要period+1個價格(period個漲跌幅)才能算。"""
+    if len(history) < period + 1:
+        return None
+    changes = [history[i] - history[i - 1] for i in range(-period, 0)]
+    gains = [c for c in changes if c > 0]
+    losses = [-c for c in changes if c < 0]
+    avg_gain = sum(gains) / period
+    avg_loss = sum(losses) / period
+    if avg_loss == 0:
+        return 100.0
+    rs = avg_gain / avg_loss
+    return 100 - (100 / (1 + rs))
+
+
+def _compute_bollinger(history: list[float], period: int = 20, num_std: float = 2.0) -> dict | None:
+    """布林通道(middle=SMA(period), upper/lower=middle±num_std個標準差)。"""
+    if len(history) < period:
+        return None
+    window = history[-period:]
+    mean = sum(window) / period
+    variance = sum((x - mean) ** 2 for x in window) / period
+    std = variance ** 0.5
+    return {
+        "middle": mean,
+        "upper": mean + num_std * std,
+        "lower": mean - num_std * std,
+    }
+
+
 def get_technical_snapshot(symbol: str) -> dict | None:
-    """回傳symbol的簡單技術指標快照(SMA5/SMA20/5日與20日漲跌%),純程式
-    計算不耗AI額度,給AI具體數字而非只有敘事文字可判斷。資料不足以算某個
-    指標就省略該欄位,不報錯(比照scrapers/etf0050.py._check_ma_support()
+    """回傳symbol的技術指標快照(SMA5/SMA20/5日與20日漲跌%/RSI14/布林通道),
+    純程式計算不耗AI額度,給AI具體數字而非只有敘事文字可判斷。資料不足以算
+    某個指標就省略該欄位,不報錯(比照scrapers/etf0050.py._check_ma_support()
     的既有降級模式)。完全查無歷史資料回傳None。"""
     history = get_price_history(symbol)
     if not history:
@@ -186,4 +218,15 @@ def get_technical_snapshot(symbol: str) -> dict | None:
     if len(history) >= 20:
         snapshot["sma20"] = sum(history[-20:]) / 20
         snapshot["change_20d_pct"] = (history[-1] - history[-20]) / history[-20] * 100
+
+    rsi = _compute_rsi(history)
+    if rsi is not None:
+        snapshot["rsi14"] = rsi
+
+    bollinger = _compute_bollinger(history)
+    if bollinger is not None:
+        snapshot["bollinger_upper"] = bollinger["upper"]
+        snapshot["bollinger_middle"] = bollinger["middle"]
+        snapshot["bollinger_lower"] = bollinger["lower"]
+
     return snapshot

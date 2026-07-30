@@ -301,8 +301,60 @@ def build_meta_summary(angle: str, channel_reports: list[dict]) -> dict | None:
 
 # ── 模擬持倉(紙上帳戶)進出場決策 ──
 
+# Kelly公式部位建議：樣本數達門檻前，歷史勝率統計不夠穩定，改讓AI自行
+# 估計信心值頂替(使用者2026-07-31確認的「初期1+2，樣本數夠後捨棄2」設計)。
+# 20筆是經驗上取的最小樣本門檻，不是精確統計推導值——這個帳戶的交易頻率
+# 低(尤其台股/幣圈自主判斷帳戶非高頻)，門檻定太高會讓「捨棄AI信心」這件
+# 事遲遲不會發生，20筆在「有基本統計意義」與「別等太久」間取折衷。
+KELLY_MIN_SAMPLE = 20
+
+
+def _kelly_fraction(win_rate: float, avg_win: float, avg_loss: float) -> float | None:
+    """全額Kelly比例 f* = W - (1-W)/R，R=賠率(平均獲利/平均虧損)。avg_loss
+    為0(從未虧損過，樣本失真)或payoff_ratio不合理時回傳None，呼叫端不
+    附上這個數字，不要讓AI拿到誤導性的建議值。結果clamp在[0,1]——Kelly
+    公式數學上可能算出負值(代表不該進場)或超過1(理論全押)，但cash_ratio
+    的定義域就是[0,1]，clamp是配合欄位定義，不是修改公式本身。"""
+    if avg_loss <= 0:
+        return None
+    payoff_ratio = avg_win / avg_loss
+    if payoff_ratio <= 0:
+        return None
+    f = win_rate - (1 - win_rate) / payoff_ratio
+    return max(0.0, min(1.0, f))
+
+
+def _build_kelly_guidance(win_stats: dict | None) -> str:
+    """回傳要附進prompt的Kelly部位建議文字段落。"""
+    if win_stats and win_stats["sample_size"] >= KELLY_MIN_SAMPLE:
+        f = _kelly_fraction(win_stats["win_rate"], win_stats["avg_win"], win_stats["avg_loss"])
+        if f is not None:
+            return (
+                f"\n\n部位大小參考(Kelly公式)：根據過去{win_stats['sample_size']}筆已平倉"
+                f"交易，歷史勝率{win_stats['win_rate'] * 100:.0f}%、平均獲利"
+                f"{win_stats['avg_win']:.4g}/平均虧損{win_stats['avg_loss']:.4g}，全額Kelly"
+                f"建議部位比例約{f * 100:.0f}%(實務上常打對折用half-Kelly降低波動，"
+                f"是否採用由你自行斟酌)。這是歷史統計參考值，不是強制指令，"
+                f"請綜合考量目前市場狀況決定實際cash_ratio。"
+            )
+        return ""
+
+    sample_note = (
+        f"(目前僅{win_stats['sample_size']}筆，未達{KELLY_MIN_SAMPLE}筆門檻)"
+        if win_stats else "(尚無歷史平倉紀錄)"
+    )
+    return (
+        f"\n\n部位大小參考(Kelly公式)：歷史交易樣本數不足{sample_note}，還無法"
+        f"算出穩定的統計建議值。請在reasoning中一併說明你對這筆交易的信心"
+        f"程度(當作你自己估計的勝率)，並據此自行抓一個合理的cash_ratio(邏輯"
+        f"可參考Kelly公式：部位比例≈勝率-(1-勝率)/賠率，賠率=預期獲利/"
+        f"預期虧損)。"
+    )
+
+
 def build_trade_decision(angle: str, portfolio: dict, positions: list[dict],
-                          recent_trades: list[dict], recent_reports: list[dict]) -> dict | None:
+                          recent_trades: list[dict], recent_reports: list[dict],
+                          win_stats: dict | None = None) -> dict | None:
     """
     輸入:
       angle      -> 這個帳戶的操作風格/限制描述(見main.py PORTFOLIO_CHANNELS)
@@ -312,7 +364,8 @@ def build_trade_decision(angle: str, portfolio: dict, positions: list[dict],
                     先算好才傳進來,本函式不查價、不算PnL,只讀結果)。若
                     main.py有另外查到技術指標(見price_feed.get_technical_
                     snapshot()),也會附在同一個dict裡(sma5/sma20/
-                    change_5d_pct/change_20d_pct,查無資料則缺該欄位)。
+                    change_5d_pct/change_20d_pct/rsi14/bollinger_upper/
+                    bollinger_middle/bollinger_lower,查無資料則缺該欄位)。
       recent_trades  -> db.get_recent_trades()回傳的近期交易紀錄,讓AI參考
                         「上次類似情況做過什麼、結果如何」，不是每次都從
                         零判斷(可為空list,代表尚無歷史)
@@ -321,6 +374,9 @@ def build_trade_decision(angle: str, portfolio: dict, positions: list[dict],
                         截面(呼叫端須確保至少有1筆,不可為空——沒有報告
                         代表沒有判斷依據,應由main.py在呼叫前就跳過,不是
                         靠這裡防呆)
+      win_stats  -> db.get_trade_win_stats()回傳的歷史勝率統計，或None
+                    (尚無歷史/欄位未遷移)，用於Kelly公式部位建議
+                    (2026-07-31新增，使用者確認的設計)。
 
     回傳 {"actions": [...]} 或 None(任何失敗情況,呼叫端沿用「這次先不動作」)。
     action欄位:
@@ -339,12 +395,19 @@ def build_trade_decision(angle: str, portfolio: dict, positions: list[dict],
             f"數量{p['quantity']} 均價{p['avg_cost']} 現價{p.get('current_price')} "
             f"未實現損益{p.get('unrealized_pnl')}"
         )
-        if "sma5" in p or "sma20" in p:
+        if any(k in p for k in ("sma5", "sma20", "rsi14", "bollinger_middle")):
             tech_bits = []
             if "sma5" in p:
                 tech_bits.append(f"5日均價{p['sma5']:.4g}(5日漲跌{p.get('change_5d_pct', 0):+.1f}%)")
             if "sma20" in p:
                 tech_bits.append(f"20日均價{p['sma20']:.4g}(20日漲跌{p.get('change_20d_pct', 0):+.1f}%)")
+            if "rsi14" in p:
+                tech_bits.append(f"RSI14={p['rsi14']:.1f}")
+            if "bollinger_middle" in p:
+                tech_bits.append(
+                    f"布林通道[下緣{p['bollinger_lower']:.4g}/中線{p['bollinger_middle']:.4g}"
+                    f"/上緣{p['bollinger_upper']:.4g}]"
+                )
             line += "，技術面：" + "、".join(tech_bits)
         return line
 
@@ -371,7 +434,8 @@ def build_trade_decision(angle: str, portfolio: dict, positions: list[dict],
         f"起始本金:{portfolio['starting_capital']} {portfolio['currency']}\n"
         f"目前持倉:\n{positions_text}\n\n"
         f"近期交易紀錄(供參考過去類似情況的判斷與結果,由舊到新):\n{trades_text}\n\n"
-        f"近幾天市場研判報告(由舊到新,可比對趨勢變化):\n{reports_text}\n\n"
+        f"近幾天市場研判報告(由舊到新,可比對趨勢變化):\n{reports_text}"
+        f"{_build_kelly_guidance(win_stats)}\n\n"
         "請針對現有持倉逐一決定「continue持有」或「close平倉」，並可決定是否"
         "開一個或多個新倉位(open)。新倉位的cash_ratio是這筆要動用目前現金的"
         "比例(0~1之間，例如0.3代表動用30%現金)，由你自己依信心程度決定，"

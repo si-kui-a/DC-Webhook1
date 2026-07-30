@@ -329,3 +329,44 @@ try/catch才能讓成功訊息可信。
 **已用真實Gemini呼叫驗證**(mock持倉+歷史資料,未寫入db/未觸發webhook)：
 AI的reasoning正確引用了SMA5/SMA20數字做判斷依據，證實enrichment確實
 被讀取並納入推理，不只是塞進prompt沒被使用。
+
+### [PAT-16] Gemini API Key「建立專案」≠「可用額度」，四層要分開查證
+**背景**：從已棄用的scholarship-monitor舊專案(2026-07-05,已刪除,見PAT-17)
+搬移過來的教訓——當時使用者回報「已建立Google Cloud專案」，重新驗證卻發現
+`.env`裡的key前綴/長度跟先前完全相同，`generateContent`仍回報HTTP 429，
+quotaId明確帶`-FreeTier`且`limit:0`，代表額度從一開始就是0，不是「用完了」。
+
+**教訓**：以下四件事是各自獨立、要分開查證的層次，任一層沒過都會導致
+`generateContent`失敗，不能假設「上一層通過=下一層也通過」：
+1. Google Cloud專案是否建立
+2. API key是否真的綁定到**該**專案(比對key前綴/長度是否真的變了，是
+   快速判斷使用者是否真的換了新key的低成本方法)
+3. 該專案是否已連結有效的計費帳戶(建立專案不會自動連結)
+4. 對應模型的免費額度是否真的非0(某些帳戶類型/地區的免費方案對特定
+   模型額度就是0，不是「額度用盡」，需要連結計費才會核發非零額度)
+
+**如何查**：`ListModels`呼叫成功只代表身分驗證有效(key沒壞)，不代表
+`generateContent`會成功；quotaId字串裡帶`-FreeTier`+`limit:0`是明確判斷
+「從一開始就沒有額度」而非「暫時用完」的關鍵線索。本專案`ai_insight.py`
+所有函式已經統一用「api_key不存在就直接回傳None」+外層log錯誤的模式，
+若未來真的遇到「key存在但呼叫持續失敗」，先照這四層排查，不要當成
+單純的網路/重試問題。
+
+### [PAT-17] legacy/scholarship-monitor/ 已於2026-07-30移除
+**背景**：scm專案(scholarship-monitor)已於2026-07-28棄用，內容合併進本
+專案，`legacy/scholarship-monitor/`資料夾是那次合併留下的完整封存
+(README/CLAUDE.md/Meta_Dev_Knowledge.md等)。複查後確認裡面8段標記
+「Universal Principle」的內容中，兩段真正跟本專案相關且已搬移(見PAT-16、
+本專案`db.py`的source_id/dedup_key一致性設計)，其餘因前提不成立
+(該專案有「禁止AI」的硬性限制，本專案已大量使用Gemini，前提不同)或
+過於專案特定(該專案的exclude_terms.json分類陣列結構)而未搬移。已用git
+`rm`整批移除，舊內容仍可透過git history查閱(commit移除前的版本)。
+
+**跨模組識別碼比對的教訓(從legacy MOE健康分數靜默失效bug抽取,通用原則)**：
+同一個資料實體(如來源網址/ID)在不同模組間流動時，若中間某環節把它換成
+語意相近但字面不同的值，後續任何用「完全比對」銜接的地方都會靜默斷裂——
+不拋錯、不易被發現，只有「監控/比對」這一層悄悄失靈，其餘功能表面正常。
+本專案`source_id`(如`digest_report.tw_stock_meta`)/`dedup_key`這類跨
+模組比對機制，新增來源或修改source_id命名時要留意這個風險：確保
+production/schema/呼叫端三處對同一個ID的拼法完全一致，不要出現「A模組
+存的是這個字串、B模組查的是語意相同但拼法不同的字串」的情況。

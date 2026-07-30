@@ -303,3 +303,29 @@ robots.txt 明確禁止自動化收集且點名擋 ClaudeBot）。技術可行�
 若沒有額外`-ErrorAction Stop`+try/catch，後面的`Write-Output "已建立"`
 還是會執行、產生錯誤的成功訊息——任何類似的「建立/註冊」函式都要包
 try/catch才能讓成功訊息可信。
+
+### [PAT-15] 模擬持倉決策輸入強化：歷史交易紀錄+多天報告趨勢+技術指標(2026-07-30)
+**背景**：`build_trade_decision()`原本每次只餵給AI「今天(或最近一次)的
+單一報告文字+目前持倉現價」，AI等於每次都是失憶重新判斷，沒有「上次
+類似情況做過什麼、結果如何」的記憶，也沒有數字化的趨勢資訊。使用者要求
+「快速調閱、低負擔」，故只加低成本的資訊來源，不是重新設計架構：
+
+1. `db.get_recent_trades(portfolio_id, limit=10)`——該帳戶近期trade_log，
+   純DB查詢零成本。`build_trade_decision()`的`recent_reports`參數現在是
+   **必填**且呼叫端須保證非空(main.py用它取代原本的單一`report_text`
+   做為「有無報告」的判斷閘門，改用`db.get_recent_summaries()`回傳list)。
+2. `db.get_recent_summaries(source_id, limit=5)`——同一來源近5筆已存檔
+   報告(依fetched_at新到舊)，讓AI能比對「這幾天報告怎麼變化」，同樣是
+   純DB查詢。
+3. `price_feed.get_technical_snapshot(symbol)`——SMA5/SMA20/5日與20日
+   漲跌%，純程式計算(不耗AI額度)。台股用`www.twse.com.tw/exchangeReport/
+   STOCK_DAY`(個股歷史,已直接curl驗證,只抓近2個月非etf0050.py的7個月，
+   因為只需要SMA20不需要MA120)；幣圈用Binance klines
+   (`interval=1d&limit=20`)。**只enrich目前持倉**(main.py呼叫端邏輯)，
+   不是每個AI可能想交易的新標的都算——AI選新標的的依據仍是報告敘事，
+   技術指標查詢失敗(`get_technical_snapshot()`回傳None)不影響本次執行
+   (跟`current_price`不同，那個缺了要整批放棄，這裡只是輔助資訊)。
+
+**已用真實Gemini呼叫驗證**(mock持倉+歷史資料,未寫入db/未觸發webhook)：
+AI的reasoning正確引用了SMA5/SMA20數字做判斷依據，證實enrichment確實
+被讀取並納入推理，不只是塞進prompt沒被使用。

@@ -957,10 +957,11 @@ def run_portfolio_channel(key: str):
 
     db.init_portfolios()
     portfolio = db.get_portfolio(portfolio_id)
-    report_text = db.get_latest_summary(config["meta_source_id"])
-    if not report_text:
+    recent_reports = db.get_recent_summaries(config["meta_source_id"], limit=5)
+    if not recent_reports:
         logger.info("[%s] 尚無可用的大總結報告，跳過", key)
         return
+    recent_trades = db.get_recent_trades(portfolio_id, limit=10)
 
     raw_positions = db.get_open_positions(portfolio_id)
     positions = []
@@ -969,9 +970,14 @@ def run_portfolio_channel(key: str):
         if priced is None:
             logger.error("[%s] %s 查無現價，本次跳過整個帳戶", key, p["symbol"])
             return
+        # 技術指標是輔助資訊,查不到不影響本次執行(跟current_price不同,
+        # 現價缺了就整批放棄,技術指標缺了只是讓AI少一點參考依據)。
+        tech = price_feed.get_technical_snapshot(p["symbol"])
+        if tech:
+            priced.update({k: v for k, v in tech.items() if k != "latest"})
         positions.append(priced)
 
-    decision = ai_insight.build_trade_decision(config["angle"], portfolio, positions, report_text)
+    decision = ai_insight.build_trade_decision(config["angle"], portfolio, positions, recent_trades, recent_reports)
     if not decision:
         logger.error("[%s] Gemini決策失敗（額度用盡/網路錯誤/回應格式不對），本次跳過", key)
         return

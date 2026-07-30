@@ -48,6 +48,8 @@ New-IntelPusherTask -Name 'IntelPusher-GeopoliticsDigest' -Source 'geopolitics_d
     -Trigger (New-ScheduledTaskTrigger -Daily -At 8:00PM)
 New-IntelPusherFlagTask -Name 'IntelPusher-Scholarship' -Flag 'scholarship' `
     -Trigger (New-ScheduledTaskTrigger -Daily -At 8:00PM)
+New-IntelPusherTask -Name 'IntelPusher-SemiSupplyChainDigest' -Source 'semi_supply_chain_digest' `
+    -Trigger (New-ScheduledTaskTrigger -Daily -At 8:00PM)
 
 # 官方每日開放資料來源(同樣是crontab.example移除時漏補的既有功能，
 # 9:00比照原本crontab.example的時間)。

@@ -12,10 +12,17 @@ CLI版見resume_matcher.py的__main__)。
 2. 這個bot必須在Discord Developer Portal啟用「Message Content Intent」
    (privileged intent，API無法自動開，只能人工去portal勾選)，否則
    on_message收不到訊息內容/附件。
+3. RESUME_BOT_CHANNEL_ID(獨立頻道"履歷配對顧問")。
 
-使用方式：私訊(DM)這個bot，附上履歷檔案(pdf/docx/txt/md)，或直接把履歷
-內容貼成文字訊息(超過100字才視為履歷內容，避免把「hi」這種閒聊誤判)。
-bot會回覆最適合的實習職缺推薦+履歷修改建議。
+使用者2026-07-31確認：走專屬頻道而非DM(原設計是DM，使用者改要頻道互動)。
+履歷內容屬PII(比照專案既有my_resume.json/academic_progress.md的PII
+處理原則)，只在RESUME_BOT_CHANNEL_ID這個頻道回應，忽略其餘頻道與DM的
+訊息，該頻道的可見範圍(只限本人/信任對象)由使用者自行在Discord伺服器
+權限設定管控，不是這支程式的責任範圍。
+
+使用方式：在該頻道上傳履歷檔案(pdf/docx/txt/md)，或直接貼履歷內容文字
+(超過100字才視為履歷內容，避免把閒聊誤判)。bot會回覆最適合的實習職缺
+推薦+履歷修改建議。
 
 低成本設計：呼叫Gemini只在使用者主動私訊時才觸發，不是背景輪詢，跟
 resume_matcher.py核心邏輯的低成本原則一致；resume_matcher的AI呼叫本身
@@ -39,6 +46,7 @@ import resume_matcher
 logger = logging.getLogger("resume_bot")
 
 BOT_TOKEN = os.getenv("DISCORD_BOT_TOKEN", "")
+RESUME_BOT_CHANNEL_ID = os.getenv("RESUME_BOT_CHANNEL_ID", "")
 SUPPORTED_SUFFIXES = (".pdf", ".docx", ".txt", ".md")
 MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024  # 10MB，履歷不可能超過這個大小，防止異常大檔拖垮process
 MIN_TEXT_RESUME_CHARS = 100  # 純文字訊息要超過這個長度才當履歷處理，避免把閒聊訊息誤判
@@ -46,7 +54,6 @@ DISCORD_MSG_LIMIT = 1900  # Discord單則訊息2000字上限，留一點餘裕
 
 intents = discord.Intents.default()
 intents.message_content = True  # 需要Developer Portal手動啟用的privileged intent
-intents.dm_messages = True
 
 client = discord.Client(intents=intents)
 
@@ -120,8 +127,8 @@ async def on_ready():
 async def on_message(message: discord.Message):
     if message.author == client.user:
         return
-    if not isinstance(message.channel, discord.DMChannel):
-        return  # 只處理私訊，避免在公開頻道誤觸發或洩漏他人履歷內容
+    if str(message.channel.id) != RESUME_BOT_CHANNEL_ID:
+        return  # 只處理指定頻道，避免在其他頻道誤觸發(履歷內容屬PII，見docstring)
 
     supported_attachments = [
         a for a in message.attachments
@@ -157,7 +164,7 @@ async def on_message(message: discord.Message):
         return
 
     await message.channel.send(
-        "私訊我履歷檔案(pdf/docx/txt/md)，或直接貼上履歷全文(需超過100字)，"
+        "在這裡上傳履歷檔案(pdf/docx/txt/md)，或直接貼上履歷全文(需超過100字)，"
         "我會比對目前的實習職缺+給修改建議。"
     )
 
@@ -165,6 +172,8 @@ async def on_message(message: discord.Message):
 def main():
     if not BOT_TOKEN:
         raise SystemExit("缺少環境變數 DISCORD_BOT_TOKEN，請確認 .env 已設定")
+    if not RESUME_BOT_CHANNEL_ID:
+        raise SystemExit("缺少環境變數 RESUME_BOT_CHANNEL_ID，請確認 .env 已設定")
     logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
     db.init_db()
     client.run(BOT_TOKEN)

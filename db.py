@@ -281,22 +281,11 @@ def close_position(position_id: str, price: float, trade_date: str, reasoning: s
         "UPDATE portfolio SET current_cash = current_cash + ? WHERE portfolio_id=?",
         (margin_used + pnl, pos["portfolio_id"]),
     )
-    # pnl欄位2026-07-31新增(ALTER TABLE，待使用者APPROVED後才會真的存在)，
-    # 用try/except容錯：欄位還沒建立前，退化成不存pnl的舊版INSERT，不讓
-    # Kelly功能開發卡住其餘平倉邏輯——遷移生效後這個except分支自然不再
-    # 觸發，不需要額外開關切換。
-    try:
-        conn.execute(
-            """INSERT INTO trade_log (portfolio_id, trade_date, action, symbol, quantity, price, pnl, reasoning, created_at)
-               VALUES (?, ?, 'close', ?, ?, ?, ?, ?, ?)""",
-            (pos["portfolio_id"], trade_date, pos["symbol"], pos["quantity"], price, pnl, reasoning, now),
-        )
-    except sqlite3.OperationalError:
-        conn.execute(
-            """INSERT INTO trade_log (portfolio_id, trade_date, action, symbol, quantity, price, reasoning, created_at)
-               VALUES (?, ?, 'close', ?, ?, ?, ?, ?)""",
-            (pos["portfolio_id"], trade_date, pos["symbol"], pos["quantity"], price, reasoning, now),
-        )
+    conn.execute(
+        """INSERT INTO trade_log (portfolio_id, trade_date, action, symbol, quantity, price, pnl, reasoning, created_at)
+           VALUES (?, ?, 'close', ?, ?, ?, ?, ?, ?)""",
+        (pos["portfolio_id"], trade_date, pos["symbol"], pos["quantity"], price, pnl, reasoning, now),
+    )
     conn.commit()
     conn.close()
     return pnl
@@ -345,18 +334,14 @@ def get_published_items(source_id: str, limit: int = 50) -> list[dict]:
 
 def get_trade_win_stats(portfolio_id: str) -> dict | None:
     """回傳這個帳戶歷史已平倉交易的勝率統計(供Kelly公式部位建議用)。
-    trade_log.pnl欄位是2026-07-31新增的ALTER TABLE(待APPROVED)，欄位還
-    不存在時捕捉OperationalError回傳None，讓呼叫端自然退化成「歷史樣本
-    不足」的既有分支，不需要另外判斷欄位是否存在。"""
+    trade_log.pnl是2026-07-31新增欄位(ALTER TABLE，使用者已APPROVED並
+    執行)，樣本數不足(含0筆)時回傳None，呼叫端自然退化成「歷史樣本不足」
+    的既有分支。"""
     conn = get_conn()
-    try:
-        rows = conn.execute(
-            "SELECT pnl FROM trade_log WHERE portfolio_id=? AND action='close' AND pnl IS NOT NULL",
-            (portfolio_id,),
-        ).fetchall()
-    except sqlite3.OperationalError:
-        conn.close()
-        return None
+    rows = conn.execute(
+        "SELECT pnl FROM trade_log WHERE portfolio_id=? AND action='close' AND pnl IS NOT NULL",
+        (portfolio_id,),
+    ).fetchall()
     conn.close()
 
     pnls = [r["pnl"] for r in rows]

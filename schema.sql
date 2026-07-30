@@ -83,7 +83,9 @@ CREATE TABLE IF NOT EXISTS trade_log (
     quantity      REAL,
     price         REAL,
     reasoning     TEXT,                  -- 進出場才需要策略理由;hold_update可留空
-    created_at    TEXT NOT NULL
+    created_at    TEXT NOT NULL,
+    pnl           REAL                  -- 只有action='close'才有值,供Kelly公式歷史勝率統計用
+                                          -- (2026-07-31 ALTER TABLE新增,使用者APPROVED)
 );
 
 CREATE INDEX IF NOT EXISTS idx_position_portfolio ON position(portfolio_id, status);

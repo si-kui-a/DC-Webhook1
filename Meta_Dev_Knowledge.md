@@ -259,10 +259,18 @@ robots.txt 明確禁止自動化收集且點名擋 ClaudeBot）。技術可行�
    才會產出，收盤時點只有前一晚的報告可用。`crypto_futures`/
    `crypto_discretionary`帳戶每小時執行一次(見`crontab.example`)，
    即使大總結報告當天未更新，現價變化仍可能觸發平倉/加碼。
-6. **即時價格來源尚未實作**：`price_feed.get_price()`目前是
-   `NotImplementedError`的stub，使用者本人負責接上場外即時價格API
-   (台股/加密貨幣)。在接上之前，所有`*_portfolio` cron job執行時都會
-   在查價這步log錯誤並跳過，不會用假資料頂替、不會半套執行交易。
+6. **即時價格來源(已實作,2026-07-30)**：`price_feed.get_price()`依symbol
+   格式路由——純數字視為台股代號,查`openapi.twse.com.tw/v1/exchangeReport/
+   STOCK_DAY_ALL`(官方開放資料,免key,無robots限制,已直接curl驗證,一個
+   process內只查一次全市場快照後記憶體快取)；其餘視為加密貨幣代號,查
+   Binance公開行情`api.binance.com/api/v3/ticker/price?symbol={SYM}USDT`
+   (免key,官方文件本來就是給程式化查價用的)。**刻意不採用**
+   `mis.twse.com.tw`的盤中即時報價端點——那是TWSE未正式開放的內部端點,
+   `robots.txt`明確`Disallow: /`,且即時報價在台灣是TWSE的商業產品,依
+   PAT-11「技術可存取≠有權限抓取」判斷不採用；台股帳戶反正只在收盤後
+   跑一次，STOCK_DAY_ALL的收盤價已經是需要的「當下市價」，不需要真正
+   盤中即時報價。查不到/查詢失敗一律回傳None(不拋例外)，呼叫端沿用
+   「None就跳過這筆」的既有邏輯，不會用假資料頂替。
 7. **PnL公式(已用db.open_position()/close_position()實測驗證)**：
    `margin_used = avg_cost*quantity/leverage`(開倉扣除)；多單
    `pnl=(price-avg_cost)*quantity`，空單`pnl=(avg_cost-price)*quantity`；

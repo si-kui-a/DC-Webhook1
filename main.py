@@ -921,9 +921,8 @@ PORTFOLIO_CHANNELS = {
 
 def _price_with_pnl(position: dict) -> dict | None:
     """幫position補上current_price/unrealized_pnl/market_value,查價失敗
-    (含price_feed尚未實作)回傳None,呼叫端須整批放棄本次執行——缺價無法
-    正確算PnL,不可用avg_cost或0頂替(會讓數字失真,違反PnL公式須先核對
-    的規則)。"""
+    回傳None,呼叫端須整批放棄本次執行——缺價無法正確算PnL,不可用avg_cost
+    或0頂替(會讓數字失真,違反PnL公式須先核對的規則)。"""
     price = price_feed.get_price(position["symbol"])
     if price is None:
         return None
@@ -962,17 +961,13 @@ def run_portfolio_channel(key: str):
         return
 
     raw_positions = db.get_open_positions(portfolio_id)
-    try:
-        positions = []
-        for p in raw_positions:
-            priced = _price_with_pnl(p)
-            if priced is None:
-                logger.error("[%s] %s 查無現價，本次跳過整個帳戶", key, p["symbol"])
-                return
-            positions.append(priced)
-    except NotImplementedError as e:
-        logger.error("[%s] 價格來源尚未接上：%s", key, e)
-        return
+    positions = []
+    for p in raw_positions:
+        priced = _price_with_pnl(p)
+        if priced is None:
+            logger.error("[%s] %s 查無現價，本次跳過整個帳戶", key, p["symbol"])
+            return
+        positions.append(priced)
 
     decision = ai_insight.build_trade_decision(config["angle"], portfolio, positions, report_text)
     if not decision:
@@ -1007,11 +1002,7 @@ def run_portfolio_channel(key: str):
                 continue
             side = a["side"] if is_crypto_futures and a["side"] in ("long", "short") else "long"
             leverage = a["leverage"] if is_crypto_futures and a["leverage"] > 1 else 1.0
-            try:
-                price = price_feed.get_price(a["symbol"])
-            except NotImplementedError as e:
-                logger.error("[%s] 開倉查價失敗：%s", key, e)
-                continue
+            price = price_feed.get_price(a["symbol"])
             if price is None or price <= 0:
                 logger.warning("[%s] %s 查無現價，忽略此開倉動作", key, a["symbol"])
                 continue
@@ -1031,10 +1022,7 @@ def run_portfolio_channel(key: str):
     portfolio = db.get_portfolio(portfolio_id)
     final_positions = []
     for p in db.get_open_positions(portfolio_id):
-        try:
-            priced = _price_with_pnl(p)
-        except NotImplementedError:
-            priced = None
+        priced = _price_with_pnl(p)
         # 交易已經執行完了,查價失敗只影響報告顯示,不能因此不推播——
         # 用avg_cost頂替current_price純粹是顯示用途(market_value退回margin_used,
         # 不假裝算得出unrealized_pnl),不影響db裡任何已寫入的數字。

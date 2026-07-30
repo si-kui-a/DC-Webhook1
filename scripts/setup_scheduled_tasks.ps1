@@ -17,6 +17,19 @@ function New-IntelPusherTask {
     }
 }
 
+function New-IntelPusherFlagTask {
+    # --scholarship/--internship是布林flag，不是--source X的形式，另開一個
+    # helper而不是硬改New-IntelPusherTask的參數形狀。
+    param($Name, $Flag, $Trigger)
+    $action = New-ScheduledTaskAction -Execute $Python -Argument "$MainPy --$Flag"
+    try {
+        Register-ScheduledTask -TaskName $Name -Action $action -Trigger $Trigger -Force -ErrorAction Stop | Out-Null
+        Write-Output "已建立: $Name"
+    } catch {
+        Write-Output "失敗: $Name -- $($_.Exception.Message)"
+    }
+}
+
 # 大總結頻道(20:30,晚間彙整之後)
 New-IntelPusherTask -Name 'IntelPusher-TwStockMeta' -Source 'tw_stock_meta' `
     -Trigger (New-ScheduledTaskTrigger -Daily -At 8:30PM)
@@ -32,5 +45,14 @@ New-IntelPusherTask -Name 'IntelPusher-CryptoFuturesPortfolio' -Source 'crypto_f
     -Trigger (New-ScheduledTaskTrigger -Once -At (Get-Date) -RepetitionInterval (New-TimeSpan -Hours 1) -RepetitionDuration (New-TimeSpan -Days 3650))
 New-IntelPusherTask -Name 'IntelPusher-CryptoDiscretionaryPortfolio' -Source 'crypto_discretionary_portfolio' `
     -Trigger (New-ScheduledTaskTrigger -Once -At (Get-Date) -RepetitionInterval (New-TimeSpan -Hours 1) -RepetitionDuration (New-TimeSpan -Days 3650))
+
+# 台灣實習頻道(每天09:00,daily不限工作日——職缺任何一天都可能新增)。
+# 資料源(MOL台灣就業通開放資料)實測updateTime固定是每天01:00更新一次
+# (見Meta_Dev_Knowledge.md PAT-18)，一天內多次執行只會重複處理同一份
+# 快照、白白多打Gemini語意消歧的API，故只排一天一次，09:00讓資料確定
+# 已更新完畢(比照twse_tsmc/twse_chunghwa等其他官方每日資料源的既有排程
+# 時間)。
+New-IntelPusherFlagTask -Name 'IntelPusher-Internship' -Flag 'internship' `
+    -Trigger (New-ScheduledTaskTrigger -Daily -At 9:00AM)
 
 Write-Output '完成,用 Get-ScheduledTask -TaskName "IntelPusher-*" 確認。'

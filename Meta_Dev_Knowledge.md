@@ -443,3 +443,25 @@ session正在新增的功能」(模擬持倉/大總結/實習頻道)建了排程
 任何AI決策結果(不只hold)都必須在推播訊息裡呈現理由，不能因為「這個
 分支剛好沒有一個明顯的顯示欄位」就讓理由消失——使用者需要知道「為什麼
 不動作」跟「為什麼動作」一樣重要。
+
+### [PAT-21] run_scholarship()/run_internship()漏掉mark_published，重蹈PAT-03的坑
+**背景**：2026-07-30測試Telegram路由時查db發現，今天推播成功的135筆
+獎學金/實習項目，`item.status`全部卡在`'new'`，不是`'published'`——
+兩個函式的成功推播分支都沒有呼叫`db.mark_published()`(對照
+`run_digest_channel()`/`run_meta_summary_channel()`/`run_source()`都有
+呼叫)。這正是PAT-03已經記錄過、警告過的「status欄位雙重語意風險」，
+但沒有被套用到後來新增的這兩個pipeline——**教訓**：專案自己的knowledge
+base裡的規則，新增類似功能時要主動核對是否適用，不能只在事後被問題
+逼出來才想起。
+
+**影響評估**：不影響去重(dedup_key才是去重依據，不是status)，純粹是
+status語意不誠實；但若未來有功能誤用`status='new'`當作「待處理」的
+篩選條件，會把這些已經真正推播過的項目誤判成還沒處理過，重蹈PAT-03
+描述的同一種錯誤。
+
+**修復**：兩個函式都補上「all_ok旗標+推播全部成功才mark_published」的
+模式(跟run_digest_channel()一致)。並對`data.db`做一次性回填：135筆
+今天已確認推播成功(Discord log/Telegram補發通知都證實過)的項目，從
+`'new'`改成`'published'`(限定`source_id LIKE 'scholarship%' OR
+'internship%'` + `fetched_at`是今天，避免誤改到其他來源或其他日期的
+資料)。

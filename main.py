@@ -470,6 +470,7 @@ def run_scholarship():
         return
 
     # 推播到 Discord（每條 chunk 一個 embed）
+    all_ok = True
     for i, chunk in enumerate(chunks):
         embed = build_embed(
             title=f"📚 獎學金快報 {'（續）' if i > 0 else ''}",
@@ -481,7 +482,17 @@ def run_scholarship():
         if ok:
             logger.info("獎學金批次推播成功（chunk %d/%d）", i + 1, len(chunks))
         else:
+            all_ok = False
             logger.error("獎學金批次推播失敗（chunk %d/%d）: HTTP %s %s", i + 1, len(chunks), status, err)
+
+    # 標記已推播——原本這裡漏掉這一步，status一直卡在'new'，正是本專案
+    # Meta_Dev_Knowledge.md PAT-03警告過的「status雙重語意風險」(2026-07-30
+    # 發現)：去重靠dedup_key不受影響，但語意不誠實，未來若有功能誤用
+    # status='new'找待處理項目會誤判成這些已經推播過的項目還沒處理。
+    if all_ok:
+        for items in new_items_by_source.values():
+            for item in items:
+                db.mark_published(item["item_id"])
 
     # Telegram — 僅簡短通知，不再在頻道內發佈完整內容；完整獎學金全數統一於
     # Discord 機器人完整輸出（見上方 webhook 推播）。
@@ -643,6 +654,7 @@ def run_internship():
         logger.warning("實習批次文字組裝失敗（可能為空）")
         return
 
+    all_ok = True
     for i, chunk in enumerate(chunks):
         embed = build_embed(
             title=f"💼 台灣實習快報{'（續）' if i > 0 else ''}",
@@ -654,7 +666,14 @@ def run_internship():
         if ok:
             logger.info("實習批次推播成功（chunk %d/%d）", i + 1, len(chunks))
         else:
+            all_ok = False
             logger.error("實習批次推播失敗（chunk %d/%d）: HTTP %s %s", i + 1, len(chunks), status, err)
+
+    # 標記已推播(同run_scholarship()的PAT-03修正，2026-07-30發現兩處都漏了)。
+    if all_ok:
+        for items in new_items_by_source.values():
+            for item in items:
+                db.mark_published(item["item_id"])
 
     # 比照run_scholarship()的Telegram簡短通知模式(使用者確認2026-07-30
     # 加上)，同樣用Schule mithelfer bot(教育類，跟財經的finfeed bot分開)。

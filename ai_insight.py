@@ -432,3 +432,72 @@ def build_trade_decision(angle: str, portfolio: dict, positions: list[dict],
     except Exception as e:
         logger.warning(f"gemini模擬持倉決策失敗: {e}")
         return None
+
+
+# ── 台灣實習頻道:關鍵字過濾後的少量候選,最終語意判斷 ──
+# 「實習」在中文職缺文本裡是多義詞(學生實習/新人試用期/應徵資格要求/
+# 設施名稱/HR職務描述)，純關鍵字regex排除規則測不勝測(2026-07-30實測
+# 純規則式precision約60%)。這裡只對internship_util關鍵字過濾後的少量
+# 候選(實測約10筆/1000筆原始職缺)呼叫一次Gemini做語意消歧，不是對全部
+# 職缺呼叫，符合「低成本」原則。
+
+def classify_internships(candidates: list[dict]) -> set[str] | None:
+    """
+    輸入candidates(已通過internship_util關鍵字過濾的少量候選),每筆為
+    {"url": str, "title": str, "detail": str}。
+    回傳真正屬於「開放給學生/社會新鮮人申請的實習職缺」的url集合，或
+    None(任何失敗情況,呼叫端應退回沿用關鍵字過濾結果，不因AI失敗就
+    整批不推播)。
+    """
+    api_key = os.getenv("GEMINI_API_KEY", "")
+    if not api_key or not candidates:
+        return None
+
+    listing = "\n\n".join(
+        f"[{i}] url={c['url']}\n標題:{c['title']}\n內容:{(c.get('detail') or '')[:400]}"
+        for i, c in enumerate(candidates)
+    )
+
+    prompt = (
+        "以下是關鍵字初篩後的職缺候選清單，「實習」在中文職缺文本裡是多義詞，"
+        "常見誤判來源包括：(a)新人試用期/教育訓練話術(例如「安排實習及數位課程"
+        "訓練」)、(b)應徵資格要求(例如「具...實習經驗」是要求應徵者已有實習經歷，"
+        "不是提供實習)、(c)實習工場/實習教室這類設施名稱、(d)職務描述提到"
+        "「負責規劃實習專案」(這是要應徵者去管理別人的實習，不是本身是實習)。\n"
+        "請判斷每一筆是否為「真正開放給學生或社會新鮮人申請的實習職缺本身」，"
+        "只有這種才算真。\n\n"
+        f"候選清單:\n{listing}\n\n"
+        '只回傳JSON,格式:{"genuine_indices": [0, 2, ...]}(整數index陣列，'
+        "只列出判斷為真的候選，全部都不是就回傳空陣列)"
+    )
+
+    url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent"
+    body = json.dumps({
+        "contents": [{"role": "user", "parts": [{"text": prompt}]}],
+        "generationConfig": {"temperature": 0.1, "responseMimeType": "application/json"},
+    }).encode("utf-8")
+    req = urllib.request.Request(
+        url, data=body,
+        headers={"Content-Type": "application/json", "x-goog-api-key": api_key},
+        method="POST",
+    )
+
+    def _do():
+        with urllib.request.urlopen(req, timeout=TIMEOUT_SECONDS) as resp:
+            return json.loads(resp.read().decode("utf-8"))
+
+    try:
+        data = _with_retry(_do)
+        text = data["candidates"][0]["content"]["parts"][0]["text"]
+        parsed = json.loads(text)
+        indices = parsed.get("genuine_indices", [])
+        if not isinstance(indices, list):
+            return None
+        return {
+            candidates[i]["url"]
+            for i in indices
+            if isinstance(i, int) and 0 <= i < len(candidates)
+        }
+    except Exception as e:
+        logger.warning(f"gemini實習候選判斷失敗: {e}")
+        return None

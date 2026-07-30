@@ -47,6 +47,8 @@ from scrapers import substack_generic
 import digest_format
 from scrapers import scholarship_daad, scholarship_moe, scholarship_thu, scholarship_efg
 from scrapers import scholarship_util
+from scrapers import internship_mol
+from scrapers import internship_util
 
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
 WORK_DIR = os.path.join(PROJECT_ROOT, "work")
@@ -92,6 +94,14 @@ SCHOLARSHIP_REGISTRY = {
     "scholarship_moe": (scholarship_moe.fetch, scholarship_moe.SOURCE_NAME, scholarship_moe.SOURCE_ID),
     "scholarship_thu": (scholarship_thu.fetch, scholarship_thu.SOURCE_NAME, scholarship_thu.SOURCE_ID),
     "scholarship_efg": (scholarship_efg.fetch, scholarship_efg.SOURCE_NAME, scholarship_efg.SOURCE_ID),
+}
+
+# 台灣實習頻道(比照獎學金頻道模式,使用者確認2026-07-30；科系與資歷不設限，
+# 不套用scholarship_util那套學校/年級/身份別排除規則，只用internship_util
+# 關鍵字計分判斷是否為實習職缺)。目前只有MOL一個來源，仍沿用registry字典
+# 結構以利未來擴充第二個來源。
+INTERNSHIP_REGISTRY = {
+    "internship_mol": (internship_mol.fetch, internship_mol.SOURCE_NAME, internship_mol.SOURCE_ID),
 }
 
 # 連續失敗超過此次數，視為需要人工介入（用於未來接外部告警，本 MVP 先只記 log）
@@ -306,6 +316,9 @@ SCHOLARSHIP_WEBHOOK_ENV = "WEBHOOK_SCHOLARSHIP"
 # 首次執行安全閘門：每來源最多推播 N 筆（避免洗版）
 SCHOLARSHIP_FIRST_RUN_CAP = 20
 
+INTERNSHIP_WEBHOOK_ENV = "WEBHOOK_INTERNSHIP"
+INTERNSHIP_FIRST_RUN_CAP = 20
+
 
 def _build_scholarship_batch(items_by_source: dict[str, list[dict]]) -> list[str]:
     """
@@ -484,6 +497,158 @@ def run_scholarship():
         f"完整內容請至 Discord #獎學金頻道查看"
     )
     notify_telegram.send_message(tg_brief)
+
+
+def _build_internship_batch(items_by_source: dict[str, list[dict]]) -> list[str]:
+    """比照_build_scholarship_batch()的組裝邏輯，只是文案改成實習。"""
+    date_str = datetime.now().strftime("%Y-%m-%d")
+    header = f"💼 *台灣實習快報* | {date_str}"
+    full_lines = [header, ""]
+
+    for source_name, items in items_by_source.items():
+        if not items:
+            continue
+        full_lines.append("━━━━━━━━━━━━━")
+        full_lines.append(f"*【{source_name}】*（{len(items)} 筆）")
+        for item in items:
+            title = item["title"][:120]
+            url = item.get("url", "")
+            full_lines.append(f"• [{title}]({url})" if url else f"• {title}")
+
+    full_text = "\n".join(full_lines)
+    if not full_text.strip():
+        return []
+    if len(full_text) <= 3900:
+        return [full_text]
+
+    # 塞不下就每N筆拆一條(目前只有單一來源，不需要scholarship那套多來源分組邏輯)
+    chunks = []
+    current = [header, ""]
+    for source_name, items in items_by_source.items():
+        for item in items:
+            title = item["title"][:120]
+            url = item.get("url", "")
+            line = f"• [{title}]({url})" if url else f"• {title}"
+            if len("\n".join(current + [line])) > 3900:
+                chunks.append("\n".join(current))
+                current = [f"💼 *台灣實習快報*（續）| {date_str}", "", line]
+            else:
+                current.append(line)
+    if len(current) > 2:
+        chunks.append("\n".join(current))
+    return chunks
+
+
+def run_internship():
+    """台灣實習頻道：比照run_scholarship()的批次執行模式，但不套用
+    scholarship_util的學校/年級/身份別排除規則(科系與資歷不設限，使用者
+    確認2026-07-30)，只用internship_util關鍵字計分判斷是否為實習職缺。"""
+    webhook_url = os.getenv(INTERNSHIP_WEBHOOK_ENV)
+    if not webhook_url:
+        logger.error("缺少環境變數 %s，跳過實習批次", INTERNSHIP_WEBHOOK_ENV)
+        return
+
+    internship_util.invalidate_cache()
+    is_first_run = all(db.count_items_for_source(info[2]) == 0 for info in INTERNSHIP_REGISTRY.values())
+
+    new_items_by_source: dict[str, list[dict]] = {}
+    total_new = 0
+
+    for key, (fetch_fn, source_name, source_id) in INTERNSHIP_REGISTRY.items():
+        db.upsert_source(source_id, source_name, "internship", "")
+        try:
+            raw_items = fetch_fn()
+        except Exception as e:
+            fail_count = db.record_fetch_failure(source_id)
+            logger.error("[%s] 抓取失敗（累計 %d 次）: %s", key, fail_count, e)
+            continue
+
+        db.record_fetch_success(source_id)
+        if not raw_items:
+            logger.info("[%s] 無資料", key)
+            continue
+
+        new_for_source = []
+        push_cap = INTERNSHIP_FIRST_RUN_CAP if is_first_run else None
+        pushed_count = 0
+
+        for raw in raw_items:
+            item = db.insert_item_if_new(
+                source_id=source_id,
+                title=raw["title"],
+                summary=raw.get("summary"),
+                url=raw["url"],
+                published_at=raw.get("published_at"),
+            )
+            if item is None:
+                continue  # 已存在
+
+            filter_text = raw.get("_filter_text") or raw["title"]
+            if not internship_util.is_relevant(filter_text):
+                db.mark_seeded_historical(item["item_id"])
+                continue
+
+            if push_cap is not None and pushed_count >= push_cap:
+                db.mark_seeded_historical(item["item_id"])
+                continue
+
+            item["_filter_text"] = filter_text  # 供下面AI語意消歧用，不進db
+            new_for_source.append(item)
+            pushed_count += 1
+
+        if new_for_source:
+            new_items_by_source[source_name] = new_for_source
+            total_new += len(new_for_source)
+            logger.info("[%s] 新項目 %d 筆", key, len(new_for_source))
+
+    if total_new == 0:
+        logger.info("實習批次完成，無新項目")
+        return
+
+    # 語意消歧：「實習」在中文職缺文本裡是多義詞(試用期/應徵資格要求/設施
+    # 名稱/HR職務描述都可能誤中關鍵字)，關鍵字過濾後的候選量少(通常
+    # <20筆)，值得呼叫一次Gemini做最終判斷。失敗時退回沿用關鍵字過濾結果，
+    # 不因AI失敗就整批不推播(見ai_insight.classify_internships())。
+    all_candidates = [
+        {"url": it["url"], "title": it["title"], "detail": it.get("_filter_text", "")}
+        for items in new_items_by_source.values() for it in items
+    ]
+    genuine_urls = ai_insight.classify_internships(all_candidates)
+    if genuine_urls is not None:
+        filtered_by_source = {}
+        for source_name, items in new_items_by_source.items():
+            kept, dropped = [], []
+            for it in items:
+                (kept if it["url"] in genuine_urls else dropped).append(it)
+            for it in dropped:
+                db.mark_seeded_historical(it["item_id"])
+            if kept:
+                filtered_by_source[source_name] = kept
+        new_items_by_source = filtered_by_source
+        total_new = sum(len(v) for v in new_items_by_source.values())
+        if total_new == 0:
+            logger.info("實習批次完成，AI語意判斷後無真實實習職缺")
+            return
+    else:
+        logger.warning("實習AI語意判斷失敗，退回沿用關鍵字過濾結果（%d 筆）", total_new)
+
+    chunks = _build_internship_batch(new_items_by_source)
+    if not chunks:
+        logger.warning("實習批次文字組裝失敗（可能為空）")
+        return
+
+    for i, chunk in enumerate(chunks):
+        embed = build_embed(
+            title=f"💼 台灣實習快報{'（續）' if i > 0 else ''}",
+            description=chunk,
+            url="",
+            footer="台灣實習監控",
+        )
+        ok, status, err = send_webhook(webhook_url, embed)
+        if ok:
+            logger.info("實習批次推播成功（chunk %d/%d）", i + 1, len(chunks))
+        else:
+            logger.error("實習批次推播失敗（chunk %d/%d）: HTTP %s %s", i + 1, len(chunks), status, err)
 
 
 # 晚間彙整頻道(甲類:AI敘事交叉比對,見設計討論)。頻道間共用同一套執行邏輯
@@ -1055,18 +1220,22 @@ def main():
                         help="執行單一來源（與 --scholarship 二選一）")
     parser.add_argument("--scholarship", action="store_true",
                         help="批次執行所有獎學金來源")
+    parser.add_argument("--internship", action="store_true",
+                        help="批次執行所有台灣實習來源")
     args = parser.parse_args()
 
-    if not args.source and not args.scholarship:
+    if not args.source and not args.scholarship and not args.internship:
         parser.print_help()
         sys.exit(1)
-    if args.source and args.scholarship:
-        parser.error("--source 與 --scholarship 不能同時使用")
+    if sum(bool(x) for x in (args.source, args.scholarship, args.internship)) > 1:
+        parser.error("--source / --scholarship / --internship 三者互斥，一次只能選一個")
 
     db.init_db()
 
     if args.scholarship:
         run_scholarship()
+    elif args.internship:
+        run_internship()
     elif args.source in DIGEST_CHANNELS:
         run_digest_channel(args.source)
     elif args.source in META_SUMMARY_CHANNELS:

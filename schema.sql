@@ -48,3 +48,42 @@ CREATE TABLE IF NOT EXISTS delivery_log (
 
 CREATE INDEX IF NOT EXISTS idx_item_source ON item(source_id);
 CREATE INDEX IF NOT EXISTS idx_item_status ON item(status);
+
+-- 模擬持倉(使用者確認2026-07-30)：3個獨立紙上帳戶,不是真實交易,純模擬
+-- 追蹤+每日策略記錄。台股1000元、幣圈(合約限定)100u、幣圈(自主判斷)100u。
+CREATE TABLE IF NOT EXISTS portfolio (
+    portfolio_id     TEXT PRIMARY KEY,   -- 'tw_stock' / 'crypto_futures' / 'crypto_discretionary'
+    name             TEXT NOT NULL,
+    currency         TEXT NOT NULL,      -- 'TWD' / 'USDT'
+    starting_capital REAL NOT NULL,
+    current_cash     REAL NOT NULL,      -- 未投入部位的閒置現金(保證金制下=可用保證金)
+    created_at       TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS position (
+    position_id   TEXT PRIMARY KEY,      -- uuid
+    portfolio_id  TEXT NOT NULL REFERENCES portfolio(portfolio_id),
+    symbol        TEXT NOT NULL,
+    quantity      REAL NOT NULL,         -- 標的原生數量(股數/幣數),非金額——
+                                          -- notional/margin一律用quantity*price現算,
+                                          -- 不額外存放avoid notional/quantity混淆
+    avg_cost      REAL NOT NULL,         -- 進場均價
+    leverage      REAL NOT NULL DEFAULT 1,  -- 現貨/台股恆為1,合約帳戶可能>1
+    opened_at     TEXT NOT NULL,
+    status        TEXT NOT NULL DEFAULT 'open'  -- open / closed / liquidated
+);
+
+CREATE TABLE IF NOT EXISTS trade_log (
+    log_id        INTEGER PRIMARY KEY AUTOINCREMENT,
+    portfolio_id  TEXT NOT NULL REFERENCES portfolio(portfolio_id),
+    trade_date    TEXT NOT NULL,
+    action        TEXT NOT NULL,         -- open_long / open_short / close / hold_update
+    symbol        TEXT,
+    quantity      REAL,
+    price         REAL,
+    reasoning     TEXT,                  -- 進出場才需要策略理由;hold_update可留空
+    created_at    TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_position_portfolio ON position(portfolio_id, status);
+CREATE INDEX IF NOT EXISTS idx_trade_log_portfolio ON trade_log(portfolio_id, trade_date);

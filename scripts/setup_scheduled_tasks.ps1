@@ -58,6 +58,14 @@ New-IntelPusherTask -Name 'IntelPusher-TwseTsmc' -Source 'twse_tsmc' `
 New-IntelPusherTask -Name 'IntelPusher-TwseChunghwa' -Source 'twse_chunghwa' `
     -Trigger (New-ScheduledTaskTrigger -Daily -At 9:00AM)
 
+# etf0050(股價追蹤+三大法人買賣超T86"日報"+均線支撐,2026-07-30發現的
+# 排程缺口)：程式碼註解明確寫是每個交易日性質的資料，原本只靠
+# IntelPusher-Weekly(每週一一次)順便覆蓋，法人動向等於一週才更新一次，
+# 跟資料本身的日頻更新不符。比照macro_fred同為平日9:00(非交易日執行
+# 只會抓到空資料，靜默省略，不影響其餘功能，見etf0050.py既有容錯設計)。
+New-IntelPusherTask -Name 'IntelPusher-Etf0050' -Source 'etf0050' `
+    -Trigger (New-ScheduledTaskTrigger -Weekly -DaysOfWeek Monday,Tuesday,Wednesday,Thursday,Friday -At 9:00AM)
+
 # 大總結頻道(20:30,晚間彙整之後)
 New-IntelPusherTask -Name 'IntelPusher-TwStockMeta' -Source 'tw_stock_meta' `
     -Trigger (New-ScheduledTaskTrigger -Daily -At 8:30PM)

@@ -496,7 +496,13 @@ def run_scholarship():
         f"來源：{source_summary}\n\n"
         f"完整內容請至 Discord #獎學金頻道查看"
     )
-    notify_telegram.send_message(tg_brief)
+    # 獎學金屬於教育類內容，改用獨立的Schule mithelfer bot，不跟財經類的
+    # finfeed bot共用(使用者確認2026-07-30)。
+    notify_telegram.send_message(
+        tg_brief,
+        bot_token=notify_telegram.TELEGRAM_EDU_BOT_TOKEN,
+        chat_id=notify_telegram.TELEGRAM_EDU_CHAT_ID,
+    )
 
 
 def _build_internship_batch(items_by_source: dict[str, list[dict]]) -> list[str]:
@@ -649,6 +655,25 @@ def run_internship():
             logger.info("實習批次推播成功（chunk %d/%d）", i + 1, len(chunks))
         else:
             logger.error("實習批次推播失敗（chunk %d/%d）: HTTP %s %s", i + 1, len(chunks), status, err)
+
+    # 比照run_scholarship()的Telegram簡短通知模式(使用者確認2026-07-30
+    # 加上)，同樣用Schule mithelfer bot(教育類，跟財經的finfeed bot分開)。
+    source_summary = "、".join(
+        f"{name}（{len(items)} 筆）"
+        for name, items in new_items_by_source.items()
+        if items
+    )
+    tg_brief = (
+        f"💼 *台灣實習快報已更新*\n"
+        f"共 {total_new} 筆新項目\n"
+        f"來源：{source_summary}\n\n"
+        f"完整內容請至 Discord #台灣實習情報查看"
+    )
+    notify_telegram.send_message(
+        tg_brief,
+        bot_token=notify_telegram.TELEGRAM_EDU_BOT_TOKEN,
+        chat_id=notify_telegram.TELEGRAM_EDU_CHAT_ID,
+    )
 
 
 # 晚間彙整頻道(甲類:AI敘事交叉比對,見設計討論)。頻道間共用同一套執行邏輯

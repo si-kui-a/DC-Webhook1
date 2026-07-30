@@ -6,7 +6,8 @@
 #   1. 已在此目錄執行過 `git init` 且已設定 remote origin（私有倉庫）
 #   2. 已設定 fine-grained PAT 或 SSH deploy key，且僅有該倉庫的 push 權限
 #
-# 建議排程：crontab 每日凌晨執行一次，見 crontab.example
+# 建議排程：本專案實際跑在 Windows Task Scheduler，見 scripts/setup_scheduled_tasks.ps1
+# (crontab.example 是早期規劃階段假設的部署方式，跟實際情況不符，已移除，見PAT-14)
 #
 # 兩份 log 用途明確分離（依 git push 的 exit code 判斷，不是看有沒有輸出內容——
 # git push 成功時也會把 ref 更新資訊寫到 stderr，用「有沒有輸出」判斷會誤把
@@ -49,9 +50,14 @@ fi
 #    透過 .gitignore 排除，此處不重複列出以免兩處清單不同步。
 #    intel-pusher 目前沒有 PII_FILES（見 encrypt_backup.py），所以沒有
 #    對應的 .enc 檔案要加；等這個專案真的產生個資檔案時再加進來。
+#    2026-07-31自我檢討發現這份清單長期落後於實際專案結構(ai_insight.py/
+#    digest_format.py/notify_telegram.py/price_feed.py/config//scripts//
+#    docs//CLAUDE.md都是既有git追蹤檔案但從未列在這裡)——這些檔案的異動
+#    只能靠手動commit才會進版控，夜間自動備份完全沒覆蓋到，一併補上。
 git add scrapers/ main.py db.py push_webhook.py encrypt_backup.py schema.sql \
-        summarizer_zh.py summarizer_en.py \
-        README.md requirements.txt crontab.example backup.sh \
+        summarizer_zh.py summarizer_en.py ai_insight.py digest_format.py \
+        notify_telegram.py price_feed.py config/ scripts/ docs/ \
+        README.md requirements.txt backup.sh CLAUDE.md \
         .gitignore .env.example Meta_Dev_Knowledge.md Meta_User_Feedback.md 2>/dev/null || true
 
 # 3. 若沒有變更，git commit 會因為「nothing to commit」而失敗（不是產生空

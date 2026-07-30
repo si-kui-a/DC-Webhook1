@@ -93,4 +93,20 @@ New-IntelPusherTask -Name 'IntelPusher-CryptoDiscretionaryPortfolio' -Source 'cr
 New-IntelPusherFlagTask -Name 'IntelPusher-Internship' -Flag 'internship' `
     -Trigger (New-ScheduledTaskTrigger -Daily -At 9:00AM)
 
+# 履歷配對Discord常駐bot(2026-07-31新增)。跟以上所有任務都不同性質——
+# 這支是要「一直開著」的WebSocket連線process，不是排程批次執行一次就
+# 結束，故用AtLogOn觸發(登入時啟動一次)+RestartCount設定(當機/斷線
+# 意外結束時自動重啟，最多重試99次、間隔1分鐘，避免需要人工介入重開)。
+# 前置需求：DISCORD_BOT_TOKEN對應的bot需先在Discord Developer Portal
+# 手動啟用「Message Content Intent」(privileged intent，API無法自動開)。
+$resumeBotAction = New-ScheduledTaskAction -Execute $Python -Argument (Join-Path $ProjectDir 'resume_bot.py')
+$resumeBotSettings = New-ScheduledTaskSettingsSet -RestartCount 99 -RestartInterval (New-TimeSpan -Minutes 1) -ExecutionTimeLimit (New-TimeSpan -Days 0)
+try {
+    Register-ScheduledTask -TaskName 'IntelPusher-ResumeBot' -Action $resumeBotAction `
+        -Trigger (New-ScheduledTaskTrigger -AtLogOn) -Settings $resumeBotSettings -Force -ErrorAction Stop | Out-Null
+    Write-Output '已建立: IntelPusher-ResumeBot'
+} catch {
+    Write-Output "失敗: IntelPusher-ResumeBot -- $($_.Exception.Message)"
+}
+
 Write-Output '完成,用 Get-ScheduledTask -TaskName "IntelPusher-*" 確認。'

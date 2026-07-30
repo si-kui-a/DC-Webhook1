@@ -892,18 +892,20 @@ def run_meta_summary_channel(key: str):
 # 帳戶讀取對應大總結頻道「最近一次」已產出的報告(不限定當天——tw_stock
 # 於台股收盤後13:30左右執行,當天晚上20:30才會有tw_stock_meta的新報告,
 # 收盤時點只有前一晚的報告可用,見db.get_latest_summary())，交給AI決定
-# 進出場，全部是模擬交易，不動用真實資金。
+# 進出場，全部是模擬交易，不動用真實資金。3個帳戶各自獨立頻道(使用者
+# 確認2026-07-30)，不共用webhook——避免3個帳戶的動作/持倉訊息混在同一個
+# 頻道裡難以分辨。
 PORTFOLIO_CHANNELS = {
     "tw_stock_portfolio": {
         "portfolio_id": "tw_stock",
-        "webhook_env": "WEBHOOK_PORTFOLIO",
+        "webhook_env": "WEBHOOK_PORTFOLIO_TW_STOCK",
         "channel_title": "模擬持倉－台股",
         "meta_source_id": "digest_report.tw_stock_meta",
         "angle": "台股現貨帳戶,只能做多(side必須是long),leverage固定為1,不可放空。",
     },
     "crypto_futures_portfolio": {
         "portfolio_id": "crypto_futures",
-        "webhook_env": "WEBHOOK_PORTFOLIO",
+        "webhook_env": "WEBHOOK_PORTFOLIO_CRYPTO_FUTURES",
         "channel_title": "模擬持倉－幣圈合約",
         "meta_source_id": "digest_report.crypto_meta",
         "angle": "幣圈合約帳戶,可做多可做空(side可為long或short),可使用槓桿"
@@ -911,7 +913,7 @@ PORTFOLIO_CHANNELS = {
     },
     "crypto_discretionary_portfolio": {
         "portfolio_id": "crypto_discretionary",
-        "webhook_env": "WEBHOOK_PORTFOLIO",
+        "webhook_env": "WEBHOOK_PORTFOLIO_CRYPTO_DISCRETIONARY",
         "channel_title": "模擬持倉－幣圈自主判斷",
         "meta_source_id": "digest_report.crypto_meta",
         "angle": "幣圈現貨帳戶,只能做多(side必須是long),leverage固定為1,不可放空、不可用槓桿。",

@@ -69,6 +69,7 @@ CREATE TABLE IF NOT EXISTS position (
                                           -- 不額外存放avoid notional/quantity混淆
     avg_cost      REAL NOT NULL,         -- 進場均價
     leverage      REAL NOT NULL DEFAULT 1,  -- 現貨/台股恆為1,合約帳戶可能>1
+    side          TEXT NOT NULL DEFAULT 'long',  -- long / short,決定未實現損益公式的正負號
     opened_at     TEXT NOT NULL,
     status        TEXT NOT NULL DEFAULT 'open'  -- open / closed / liquidated
 );

@@ -297,3 +297,103 @@ def build_meta_summary(angle: str, channel_reports: list[dict]) -> dict | None:
     except Exception as e:
         logger.warning(f"gemini大總結彙整失敗: {e}")
         return None
+
+
+# ── 模擬持倉(紙上帳戶)進出場決策 ──
+
+def build_trade_decision(angle: str, portfolio: dict, positions: list[dict], report_text: str) -> dict | None:
+    """
+    輸入:
+      angle      -> 這個帳戶的操作風格/限制描述(見main.py PORTFOLIO_CHANNELS)
+      portfolio  -> db.get_portfolio()回傳的dict(current_cash/currency/starting_capital)
+      positions  -> list[dict],每筆為db.get_open_positions()的欄位再加上
+                    current_price/unrealized_pnl(main.py用price_feed查完價格
+                    先算好才傳進來,本函式不查價、不算PnL,只讀結果)
+      report_text -> 今天(或最近一次)該類資產大總結頻道已產出的報告全文
+
+    回傳 {"actions": [...]} 或 None(任何失敗情況,呼叫端沿用「這次先不動作」)。
+    action欄位:
+      - "open": 開新倉,需附symbol/side(long|short)/cash_ratio(0~1,動用
+        current_cash的比例)/leverage
+      - "close": 平掉現有倉位,需附position_id(必須是positions清單裡的id)
+      - "hold": 不動作,附reasoning說明理由
+    """
+    api_key = os.getenv("GEMINI_API_KEY", "")
+    if not api_key:
+        return None
+
+    positions_text = "\n".join(
+        f"- position_id={p['position_id']} {p['symbol']} {p['side']} "
+        f"數量{p['quantity']} 均價{p['avg_cost']} 現價{p.get('current_price')} "
+        f"未實現損益{p.get('unrealized_pnl')}"
+        for p in positions
+    ) or "(目前無持倉)"
+
+    prompt = (
+        "你是操作一個小額紙上模擬帳戶的交易員(全部是模擬,不是真實交易),"
+        f"目標是把小額本金盡量放大報酬(複利滾大),但決策仍要基於下面的市場"
+        f"研判內容，不是憑空亂猜。帳戶規則：{angle}\n\n"
+        f"目前現金(可動用保證金):{portfolio['current_cash']} {portfolio['currency']}\n"
+        f"起始本金:{portfolio['starting_capital']} {portfolio['currency']}\n"
+        f"目前持倉:\n{positions_text}\n\n"
+        f"今日市場研判報告:\n{report_text}\n\n"
+        "請針對現有持倉逐一決定「continue持有」或「close平倉」，並可決定是否"
+        "開一個或多個新倉位(open)。新倉位的cash_ratio是這筆要動用目前現金的"
+        "比例(0~1之間，例如0.3代表動用30%現金)，由你自己依信心程度決定，"
+        "不設固定上限，但總和不應超過1(現金不能超額動用)。若判斷不明朗，"
+        "回傳hold並說明理由即可，不必每次都交易。\n\n"
+        '只回傳JSON,格式:{"actions": [{"action": "open"|"close"|"hold", '
+        '"symbol": "...", "side": "long"|"short", "cash_ratio": 0.0, '
+        '"leverage": 1.0, "position_id": "", "reasoning": "..."}]}'
+    )
+
+    url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent"
+    body = json.dumps({
+        "contents": [{"role": "user", "parts": [{"text": prompt}]}],
+        "generationConfig": {"temperature": 0.3, "responseMimeType": "application/json"},
+    }).encode("utf-8")
+    req = urllib.request.Request(
+        url, data=body,
+        headers={"Content-Type": "application/json", "x-goog-api-key": api_key},
+        method="POST",
+    )
+
+    def _do():
+        with urllib.request.urlopen(req, timeout=DIGEST_TIMEOUT_SECONDS) as resp:
+            return json.loads(resp.read().decode("utf-8"))
+
+    try:
+        data = _with_retry(_do)
+        text = data["candidates"][0]["content"]["parts"][0]["text"]
+        parsed = json.loads(text)
+        raw_actions = parsed.get("actions", [])
+        if not isinstance(raw_actions, list):
+            return None
+
+        actions = []
+        for a in raw_actions:
+            action = str(a.get("action", "")).strip()
+            if action not in ("open", "close", "hold"):
+                continue
+            try:
+                cash_ratio = max(0.0, min(1.0, float(a.get("cash_ratio", 0) or 0)))
+            except (TypeError, ValueError):
+                cash_ratio = 0.0
+            try:
+                leverage = float(a.get("leverage", 1) or 1)
+            except (TypeError, ValueError):
+                leverage = 1.0
+            actions.append({
+                "action": action,
+                "symbol": str(a.get("symbol", "")).strip(),
+                "side": str(a.get("side", "long")).strip() or "long",
+                "cash_ratio": cash_ratio,
+                "leverage": leverage if leverage > 0 else 1.0,
+                "position_id": str(a.get("position_id", "")).strip(),
+                "reasoning": str(a.get("reasoning", "")).strip(),
+            })
+
+        return {"actions": actions}
+    except Exception as e:
+        logger.warning(f"gemini模擬持倉決策失敗: {e}")
+        return None

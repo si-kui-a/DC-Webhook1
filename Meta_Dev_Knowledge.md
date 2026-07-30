@@ -237,3 +237,37 @@ robots.txt 明確禁止自動化收集且點名擋 ClaudeBot）。技術可行�
 ### [PAT-12] 多來源首次執行閘門判斷用 any()，不是 all()
 **規則**：混合「已有歷史的舊來源」與「全新來源」時，`all(count==0)`
 會被舊來源拖累、誤判非首次而讓閘門失效；須用 `any(count==0)`。
+
+### [PAT-13] 模擬持倉(紙上帳戶)設計決策紀錄（使用者確認2026-07-30）
+**背景**：`schema.sql` 的 portfolio/position/trade_log 三張表、
+`main.py` 的 `PORTFOLIO_CHANNELS`/`run_portfolio_channel()`、
+`price_feed.py`、`ai_insight.build_trade_decision()` 都是這次對話確認
+後新增的功能，設計決策只存在對話紀錄裡，特此記錄避免以後重新討論一次：
+
+1. **3個獨立紙上帳戶**：`tw_stock`(1000 TWD)、`crypto_futures`
+   (100 USDT，可做多做空、可用槓桿)、`crypto_discretionary`
+   (100 USDT，只能做多、槓桿固定1)。純模擬追蹤，不動用真實資金。
+2. **決策來源**：AI(Gemini)讀取對應大總結頻道(`tw_stock_meta`/
+   `crypto_meta`)已產出的報告內容，自主判斷進出場，不需人工核准/介入。
+3. **下注比例**：AI自己決定`cash_ratio`(動用多少比例的現金)，不設固定
+   上限，目標是小額本金極大化報酬(複利滾大)，`main.py`只做防呆
+   clamp(0~1)，不做業務邏輯上的比例限制。
+4. **標的範圍**：不限制白名單，大總結報告提到什麼標的就可以交易什麼。
+5. **執行時機**：`tw_stock`帳戶在台股收盤(13:30)後執行(14:00 cron)，
+   讀取「最近一次」(不限定當天)的`tw_stock_meta`報告——見
+   `db.get_latest_summary()`，因為當天的新報告要等20:30晚間彙整批次
+   才會產出，收盤時點只有前一晚的報告可用。`crypto_futures`/
+   `crypto_discretionary`帳戶每小時執行一次(見`crontab.example`)，
+   即使大總結報告當天未更新，現價變化仍可能觸發平倉/加碼。
+6. **即時價格來源尚未實作**：`price_feed.get_price()`目前是
+   `NotImplementedError`的stub，使用者本人負責接上場外即時價格API
+   (台股/加密貨幣)。在接上之前，所有`*_portfolio` cron job執行時都會
+   在查價這步log錯誤並跳過，不會用假資料頂替、不會半套執行交易。
+7. **PnL公式(已用db.open_position()/close_position()實測驗證)**：
+   `margin_used = avg_cost*quantity/leverage`(開倉扣除)；多單
+   `pnl=(price-avg_cost)*quantity`，空單`pnl=(avg_cost-price)*quantity`；
+   平倉歸還`current_cash += margin_used + pnl`。leverage=1時
+   margin_used等於全額本金，跟現貨/台股語意一致。
+
+**待辦**：使用者接上`price_feed.py`的實際API後，這個功能才會真正開始
+執行交易；在那之前`*_portfolio` cron job只會安靜跳過，屬預期行為。

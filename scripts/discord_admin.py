@@ -9,6 +9,7 @@ Manage Webhooks 三個權限。
     python scripts/discord_admin.py list-channels
     python scripts/discord_admin.py create-channel --name "總經指標追蹤"
     python scripts/discord_admin.py create-webhook --channel-id 123456789 --name "總經指標追蹤"
+    python scripts/discord_admin.py delete-webhook --webhook-id 123456789
 """
 import argparse
 import os
@@ -104,6 +105,12 @@ def create_webhook(channel_id: str, name: str) -> str:
     return url
 
 
+def delete_webhook(webhook_id: str):
+    resp = _request("DELETE", f"/webhooks/{webhook_id}")
+    _fail_if_error(resp)
+    print(f"已刪除 webhook（ID: {webhook_id}）")
+
+
 def main():
     if sys.stdout.encoding.lower() != "utf-8":
         sys.stdout.reconfigure(encoding="utf-8")
@@ -133,6 +140,9 @@ def main():
     p_create_webhook.add_argument("--channel-id", required=True)
     p_create_webhook.add_argument("--name", required=True)
 
+    p_delete_webhook = sub.add_parser("delete-webhook", help="刪除指定 webhook")
+    p_delete_webhook.add_argument("--webhook-id", required=True)
+
     args = parser.parse_args()
 
     if args.command == "list-channels":
@@ -143,6 +153,8 @@ def main():
         rename_channel(args.channel_id, args.name)
     elif args.command == "create-webhook":
         create_webhook(args.channel_id, args.name)
+    elif args.command == "delete-webhook":
+        delete_webhook(args.webhook_id)
 
 
 if __name__ == "__main__":

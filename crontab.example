@@ -27,5 +27,20 @@
 0 20 * * * cd /opt/intel-pusher && /opt/intel-pusher/venv/bin/python main.py --source macro_tech_digest >> /opt/intel-pusher/logs/cron.log 2>&1
 0 20 * * * cd /opt/intel-pusher && /opt/intel-pusher/venv/bin/python main.py --source geopolitics_digest >> /opt/intel-pusher/logs/cron.log 2>&1
 
+# 大總結頻道(彙整當天晚間彙整頻道已產出的內容,AI綜合研判進出場/情緒)。
+# 排在20:00那批晚間彙整之後,留30分鐘緩衝時間確保來源報告都已產出。
+30 20 * * * cd /opt/intel-pusher && /opt/intel-pusher/venv/bin/python main.py --source tw_stock_meta >> /opt/intel-pusher/logs/cron.log 2>&1
+30 20 * * * cd /opt/intel-pusher && /opt/intel-pusher/venv/bin/python main.py --source crypto_meta >> /opt/intel-pusher/logs/cron.log 2>&1
+
+# 模擬持倉(紙上帳戶,純模擬追蹤,見schema.sql/Meta_Dev_Knowledge.md同段落
+# 註解)。台股帳戶於台股收盤(13:30)後執行,讀取「最近一次」tw_stock_meta
+# 報告(當天20:30才有新報告,收盤時點只有前一晚的可用,見db.get_latest_summary())。
+0 14 * * 1-5 cd /opt/intel-pusher && /opt/intel-pusher/venv/bin/python main.py --source tw_stock_portfolio >> /opt/intel-pusher/logs/cron.log 2>&1
+
+# 幣圈帳戶(合約/自主判斷)每小時執行一次重新評估持倉——即使當天大總結
+# 報告未更新,現價變化仍可能觸發平倉/加碼決策。
+0 * * * * cd /opt/intel-pusher && /opt/intel-pusher/venv/bin/python main.py --source crypto_futures_portfolio >> /opt/intel-pusher/logs/cron.log 2>&1
+0 * * * * cd /opt/intel-pusher && /opt/intel-pusher/venv/bin/python main.py --source crypto_discretionary_portfolio >> /opt/intel-pusher/logs/cron.log 2>&1
+
 # GitHub 自動備份：每日凌晨 3 點執行（加密 PII + commit + push）
 0 3 * * * /opt/intel-pusher/backup.sh >> /opt/intel-pusher/logs/backup.log 2>&1

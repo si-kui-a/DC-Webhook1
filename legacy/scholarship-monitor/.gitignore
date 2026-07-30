@@ -1,7 +1,0 @@
-node_modules/
-work/*.log
-data/*.db
-data/db.json
-data/runs.json
-data/sources.json
-.env

@@ -93,7 +93,9 @@ chmod +x backup.sh
 ./backup.sh   # 手動測試一次
 ```
 
-確認無誤後，依 `crontab.example` 加入每日排程即可全自動運作。
+確認無誤後，依 `scripts/setup_scheduled_tasks.ps1` 建立 Windows 工作排程即可全自動運作
+（本專案實際跑在 Windows Task Scheduler 上，不是 cron——`crontab.example` 是早期
+規劃階段假設的部署方式，跟實際情況不符，已移除）。
 
 ## 目錄結構
 
@@ -111,5 +113,6 @@ intel-pusher/
 │   └── semi_supply_chain.py   # stub，未實作
 ├── .env.example
 ├── requirements.txt
-└── crontab.example
+└── scripts/
+    └── setup_scheduled_tasks.ps1   # 建立Windows Task Scheduler排程(需系統管理員)
 ```

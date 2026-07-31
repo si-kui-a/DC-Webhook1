@@ -321,7 +321,20 @@ def run_source(key: str):
             if secondary_env:
                 secondary_url = os.getenv(secondary_env)
                 if secondary_url:
-                    sec_ok, sec_status, sec_err = send_webhook(secondary_url, embed)
+                    # secondary_summary存在時(2026-07-31使用者確認)，警報
+                    # 頻道只顯示觸發閥值的內容，不是主頻道那份完整報告——
+                    # 另外建一個embed，不影響主頻道已經送出的embed。
+                    secondary_summary = raw.get("secondary_summary")
+                    secondary_embed = embed if not secondary_summary else build_embed(
+                        title=item["title"],
+                        description=secondary_summary,
+                        url=item["url"],
+                        footer=source_name,
+                        published_at=item.get("published_at"),
+                        fields=fields,
+                        color=color,
+                    )
+                    sec_ok, sec_status, sec_err = send_webhook(secondary_url, secondary_embed)
                     if sec_ok:
                         logger.info(f"[{key}] 額外推播到警報頻道成功")
                     else:

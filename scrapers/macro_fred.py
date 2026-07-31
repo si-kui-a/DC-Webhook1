@@ -324,6 +324,12 @@ def fetch() -> list[dict]:
     }
     if any_alert:
         item["secondary_webhook_env"] = ALERT_WEBHOOK_ENV
+        # Discord「總經異常警報」頻道只顯示觸發閥值的指標行,不要整篇報告
+        # (2026-07-31使用者確認：原本這個頻道跟主頻道推一樣的完整內容,
+        # 警示被正常指標行稀釋)。main.py的run_source()讀取這個欄位,
+        # 只在存在時才用它蓋掉整篇report、建立另一個embed給secondary
+        # webhook,主頻道embed不受影響。
+        item["secondary_summary"] = "\n".join(f"- {w}" for w in alert_warnings)
         # Telegram只推警示重點,不推整篇報告(比照etf0050.py同一套設計)。
         item["telegram_summary"] = "⚠️ 今日總經異常警示：\n" + "\n".join(f"- {w}" for w in alert_warnings)
     return [item]

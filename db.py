@@ -39,6 +39,16 @@ def upsert_source(source_id: str, name: str, category: str, base_url: str):
     conn.close()
 
 
+def get_source(source_id: str) -> dict | None:
+    """回傳source表單筆紀錄，或None(尚未註冊過)。目前給
+    check_triggers.py的重試退避機制重用(last_fetched_at當作「上次嘗試
+    時間」，不是嚴格意義的抓取成功時間)，2026-07-31新增。"""
+    conn = get_conn()
+    row = conn.execute("SELECT * FROM source WHERE source_id=?", (source_id,)).fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
 def make_dedup_key(source_id: str, title: str, url: str) -> str:
     """去重鍵：來源 + 標題 + URL 正規化後雜湊。標題正規化可避免空白/全半形差異造成重複推播。"""
     normalized = f"{source_id}|{title.strip()}|{url.strip()}"

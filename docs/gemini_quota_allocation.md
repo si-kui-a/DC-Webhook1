@@ -54,3 +54,17 @@ tw_stock(1) + 彙整頻道(7) + 大總結(2) + 實習(1) + fed/tsmc(封頂後~3)
 
 排程異動需要在提權PowerShell執行`scripts/apply_event_triggered_crypto.ps1`
 才會真正生效(見該腳本註解),schema/程式碼異動本身已經全部完成並測試過。
+
+## 2026-07-31追加：實測發現的落差與後續修正
+
+上面的估算(~18/天)是理論值，實際盤點`work/activity.log`裡「額度用盡」
+的每日次數發現：2026-07-29有2次、2026-07-30有9次、**2026-07-31當天
+飆到67次**——原因是`crypto_futures_portfolio`/`crypto_discretionary_
+portfolio`當天剛啟用事件觸發，`check_triggers.py`的「首次執行」邏輯
+沒有退避機制：AI失敗時觸發條件不會被寫入，下一個20分鐘週期又判定成
+「首次執行」再打一次，一個上午重試超過14次。已修正(加2小時退避，見
+`check_triggers.py`)，預期明天起額度消耗會回到接近~18/天的估算值。
+
+同時`classify_internships`(實習語意消歧)已於2026-07-31完全移除，改用
+純規則(`internship_util._is_semantic_noise()`)，原本估算的「實習0~1」
+現在是穩定的**0**，重新分配後預估降到約**17/天**。

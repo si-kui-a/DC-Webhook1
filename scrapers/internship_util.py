@@ -175,3 +175,21 @@ def is_relevant(text: str, min_score: int | None = None, salary: float | None = 
     if is_excluded_by_major(text):
         return False
     return True
+
+
+def passes_profile_filters(text: str) -> bool:
+    """給像RICH這種本身就是政府見習/工讀專屬平台的來源用(2026-07-31新增)
+    ——平台定位本身已經保證是見習/工讀性質的機會，用「實習」關鍵字計分
+    門檻反而會把整個來源擋光(官方用語是「見習」不是「實習」)。跳過關鍵字
+    計分與語意噪音判斷，但學校/年級/國籍/身份別/科系/行業別排除規則
+    仍然套用——這些是使用者對「想要什麼類型職缺」的個人偏好，不因來源
+    而不同。"""
+    if not text:
+        return False
+    if _is_excluded_industry(text):
+        return False
+    if _is_excluded_by_profile(text):
+        return False
+    if is_excluded_by_major(text):
+        return False
+    return True

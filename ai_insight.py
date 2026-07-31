@@ -352,6 +352,40 @@ def _build_kelly_guidance(win_stats: dict | None) -> str:
     )
 
 
+def _parse_next_trigger(raw: object) -> dict:
+    """驗證/清理AI回傳的next_trigger欄位(事件觸發機制,2026-07-31新增)，
+    格式不合法的部分一律退回空值,不讓單一欄位解析失敗拖垮整個決策結果——
+    check_triggers.py收到空price_triggers/news_keywords會直接退回只靠
+    保底機制(min_hours_between_calls)重新評估,不是無法運作。"""
+    if not isinstance(raw, dict):
+        return {"price_triggers": [], "news_keywords": [], "reasoning": ""}
+
+    price_triggers = []
+    for t in raw.get("price_triggers", []) or []:
+        if not isinstance(t, dict) or not t.get("symbol"):
+            continue
+        entry = {"symbol": str(t["symbol"]).strip()}
+        for k in ("above", "below"):
+            try:
+                if t.get(k) is not None:
+                    entry[k] = float(t[k])
+            except (TypeError, ValueError):
+                continue
+        if "above" in entry or "below" in entry:
+            price_triggers.append(entry)
+
+    news_keywords = [
+        str(kw).strip() for kw in (raw.get("news_keywords", []) or [])
+        if kw is not None and str(kw).strip()
+    ]
+
+    return {
+        "price_triggers": price_triggers,
+        "news_keywords": news_keywords,
+        "reasoning": str(raw.get("reasoning", "")).strip(),
+    }
+
+
 def build_trade_decision(angle: str, portfolio: dict, positions: list[dict],
                           recent_trades: list[dict], recent_reports: list[dict],
                           win_stats: dict | None = None) -> dict | None:
@@ -441,9 +475,20 @@ def build_trade_decision(angle: str, portfolio: dict, positions: list[dict],
         "比例(0~1之間，例如0.3代表動用30%現金)，由你自己依信心程度決定，"
         "不設固定上限，但總和不應超過1(現金不能超額動用)。若判斷不明朗，"
         "回傳hold並說明理由即可，不必每次都交易。\n\n"
+        "本帳戶改為事件觸發制:接下來不是每小時固定重新評估,而是只有滿足"
+        "你這次設定的條件才會再次呼叫你做決策,所以請一併決定「什麼情況下"
+        "才需要再評估一次」，設定下次觸發條件(next_trigger)，包含:\n"
+        "- price_triggers:針對目前持倉或你關注的標的,設定價格上下限"
+        "(above/below,任一被突破就觸發),沒有想追蹤的可留空陣列\n"
+        "- news_keywords:值得關注的關鍵字(如特定幣種監管消息、重大協議"
+        "名稱),幣圈新聞來源出現這些詞就觸發,沒有可留空陣列\n"
+        "- reasoning:一句話說明為什麼設這些門檻\n"
+        "(市場面總經警報與最長間隔已由既有規則式機制處理,不需要你設定)\n\n"
         '只回傳JSON,格式:{"actions": [{"action": "open"|"close"|"hold", '
         '"symbol": "...", "side": "long"|"short", "cash_ratio": 0.0, '
-        '"leverage": 1.0, "position_id": "", "reasoning": "..."}]}'
+        '"leverage": 1.0, "position_id": "", "reasoning": "..."}], '
+        '"next_trigger": {"price_triggers": [{"symbol": "...", "above": 0.0, '
+        '"below": 0.0}], "news_keywords": ["..."], "reasoning": "..."}}'
     )
 
     url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent"
@@ -492,7 +537,7 @@ def build_trade_decision(angle: str, portfolio: dict, positions: list[dict],
                 "reasoning": str(a.get("reasoning", "")).strip(),
             })
 
-        return {"actions": actions}
+        return {"actions": actions, "next_trigger": _parse_next_trigger(parsed.get("next_trigger"))}
     except Exception as e:
         logger.warning(f"gemini模擬持倉決策失敗: {e}")
         return None

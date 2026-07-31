@@ -1,6 +1,6 @@
 {
   "_comment": "台灣實習頻道關鍵字計分權重(比照scholarship_keywords.json的計分模式)。",
-  "_comment_scope": "科系與資歷不設限(使用者確認2026-07-30)，不套用學校/年級/身份別排除規則，只用關鍵字判斷是否為實習職缺。",
+  "_comment_scope": "科系與資歷不設限(使用者確認2026-07-30)，不套用學校/年級/身份別排除規則，只用關鍵字判斷是否為實習職缺；2026-07-31補充：行業別(見exclude_keywords)另外處理，跟科系/資歷是兩件事。",
   "_comment_regex": "英文intern/internship必須用單字邊界regex比對，不可用純substring——'International'/'Internal'等字都內含'intern'子字串，會誤判(2026-07-30實測踩過，'International Sales Engineer'職缺被誤判為實習)。",
   "_comment_bare_term": "單獨的「實習」二字保留計分(用複合詞會漏收像'工讀生｜實習'這種非緊鄰的真實職缺)，但靠noise_regex排除「N個月實習期/實習期間」這種新人試用期的慣用句型(2026-07-30實測11筆命中裡有8筆是這種假陽性)——只有「僅命中實習二字、且命中noise_regex、且沒有其他複合詞/regex加分」才會被排除，避免誤殺真正的實習職缺。",
   "weights": {
@@ -30,7 +30,11 @@
   "regex_weights": {
     "\\bintern\\b": 3,
     "\\binternship\\b": 3,
-    "\\binterns\\b": 3
+    "\\binterns\\b": 3,
+    "完全遠端|全遠端|遠端工作|居家上班": 2
   },
+  "_comment_salary": "高薪加分(使用者確認2026-07-31)：薪資是MOL資料的數字欄位(NT_L/NT_U),不是文字關鍵字,故score_title()另外收salary參數比對,threshold先抓月薪35000元(高於2026基本工資,屬於明顯優於一般實習水準的門檻,可自行調整此數字)。",
+  "high_salary_threshold": 35000,
+  "high_salary_bonus": 2,
   "threshold": 2
 }

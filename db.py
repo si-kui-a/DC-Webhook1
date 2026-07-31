@@ -371,3 +371,54 @@ def record_hold(portfolio_id: str, trade_date: str, reasoning: str):
     )
     conn.commit()
     conn.close()
+
+
+def get_items_since(source_ids: list[str], since_iso: str) -> list[dict]:
+    """回傳指定來源在since_iso之後新抓到的項目(title/summary/fetched_at)，
+    供check_triggers.py的「消息面」關鍵字比對用(2026-07-31新增)。"""
+    if not source_ids:
+        return []
+    conn = get_conn()
+    placeholders = ",".join("?" * len(source_ids))
+    rows = conn.execute(
+        f"SELECT title, summary, fetched_at FROM item "
+        f"WHERE source_id IN ({placeholders}) AND fetched_at > ? "
+        f"ORDER BY fetched_at DESC",
+        (*source_ids, since_iso),
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def get_portfolio_trigger(portfolio_id: str) -> dict | None:
+    """回傳這個投組目前設定的事件觸發條件，或None(尚未設定過,呼叫端應視為
+    首次執行,直接觸發一次AI決策)。"""
+    conn = get_conn()
+    row = conn.execute(
+        "SELECT * FROM portfolio_trigger WHERE portfolio_id=?", (portfolio_id,)
+    ).fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def set_portfolio_trigger(portfolio_id: str, price_triggers: str, news_keywords: str,
+                           min_hours_between_calls: float, set_by_trade_log_id: int | None):
+    """AI每次做完交易決策後呼叫,寫入/更新下次應該被喚醒的條件(2026-07-31新增,
+    使用者APPROVED的event-triggered機制核心)。"""
+    now = datetime.now(timezone.utc).isoformat()
+    conn = get_conn()
+    conn.execute(
+        """INSERT INTO portfolio_trigger
+               (portfolio_id, price_triggers, news_keywords, min_hours_between_calls, set_at, set_by_trade_log_id)
+           VALUES (?, ?, ?, ?, ?, ?)
+           ON CONFLICT(portfolio_id) DO UPDATE SET
+               price_triggers=excluded.price_triggers,
+               news_keywords=excluded.news_keywords,
+               min_hours_between_calls=excluded.min_hours_between_calls,
+               set_at=excluded.set_at,
+               set_by_trade_log_id=excluded.set_by_trade_log_id""",
+        (portfolio_id, price_triggers, news_keywords, min_hours_between_calls,
+         now, set_by_trade_log_id),
+    )
+    conn.commit()
+    conn.close()

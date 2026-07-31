@@ -16,6 +16,7 @@ main.py — 主執行入口。
     python main.py --source semi_supply_chain_digest
     python main.py --source tw_stock_meta
     python main.py --source crypto_meta
+    python main.py --source daily_recap
     python main.py --source all
 
 tsmc/cbc已從即時逐篇推播改為晚間彙整(見DIGEST_CHANNELS)，substack_easypoint
@@ -24,6 +25,7 @@ tsmc/cbc已從即時逐篇推播改為晚間彙整(見DIGEST_CHANNELS)，substac
 排程用Windows工作排程器，非cron，見scripts/setup_scheduled_tasks.ps1。
 """
 import argparse
+import json
 import logging
 import os
 import sys
@@ -109,6 +111,11 @@ INTERNSHIP_REGISTRY = {
 # 連續失敗超過此次數，視為需要人工介入（用於未來接外部告警，本 MVP 先只記 log）
 FAIL_THRESHOLD = 3
 
+# fed/tsmc英文新聞翻譯上限(2026-07-31使用者確認,見docs/gemini_quota_allocation.md)：
+# 單次執行最多翻譯前N則最新文章,避免一次抓到多篇新文章時把當日Gemini配額
+# 一口氣用完,超過上限的退回英文摘要(不是錯誤,是設計上的降級)。
+TRANSLATION_CAP_PER_RUN = 3
+
 # 首次執行安全閘門：fed 本來就是個位數筆數，沒有這個風險，故不列在這裡
 # （值為 None 代表不套用閘門）。cbc/substack_easypoint已移到DIGEST_CHANNELS
 # (見DIGEST_FIRST_RUN_CAP，同樣邏輯的閘門)，這裡不再需要。
@@ -193,6 +200,7 @@ def run_source(key: str):
     new_count = 0
     pushed_count = 0
     archived_only_count = 0
+    translation_count = 0
     for raw in raw_items:
         item = db.insert_item_if_new(
             source_id=source_id,
@@ -227,10 +235,15 @@ def run_source(key: str):
         # 一律靜默退回原本的英文抽取式摘要,不影響推播本身。sentiment不寫
         # 進db——它是每次推播當下的輔助判斷,不算「這則新聞的固定摘要」,
         # 不影響dedup/db一致性原則。
+        # 2026-07-31新增上限(使用者確認):單次執行最多翻譯前TRANSLATION_CAP
+        # 則最新文章,避免單次執行(尤其新項目一次湧入時)把當日Gemini配額
+        # 一口氣用完,超過上限的一律退回英文摘要(跟Gemini呼叫失敗同一個
+        # 降級路徑,不是新的錯誤狀態)。
         sentiment = None
         sentiment_reason = None
-        if summary and key in DETAIL_FETCHERS:
+        if summary and key in DETAIL_FETCHERS and translation_count < TRANSLATION_CAP_PER_RUN:
             insight = ai_insight.get_translation_and_sentiment(summary)
+            translation_count += 1
             if insight:
                 summary = insight["zh_summary"]
                 sentiment = insight["sentiment"]
@@ -603,7 +616,7 @@ def run_internship():
                 continue  # 已存在
 
             filter_text = raw.get("_filter_text") or raw["title"]
-            if not internship_util.is_relevant(filter_text):
+            if not internship_util.is_relevant(filter_text, salary=raw.get("_salary_high")):
                 db.mark_seeded_historical(item["item_id"])
                 continue
 
@@ -1121,6 +1134,79 @@ def run_meta_summary_channel(key: str):
             db.mark_published(saved["item_id"])
 
 
+# 每日晨間快報(使用者2026-07-31確認)：早上7:00推播「昨日全日」跨頻道
+# 重點摘要，範圍刻意選已經是最上層合成結果的3個來源(tw_stock_meta/
+# crypto_meta本身就是彙整過etf0050/tsmc/cbc/macro_fred/macro_tech/
+# geopolitics/us_stock/crypto的大總結；semi_supply_chain_digest不在
+# 任一大總結的contributing sources裡，故額外納入)，不是重新彙整所有
+# 原始頻道——避免跟tw_stock_meta/crypto_meta的內容大量重複，也維持
+# prompt大小可控(低成本)。同時推播Discord(新頻道)+Telegram(沿用finfeed
+# bot，使用者確認"日報週報在DC應另開頻道"、Telegram沿用既有bot不用
+# 新申請)。
+DAILY_RECAP_SOURCES = [
+    ("digest_report.tw_stock_meta", "台股大總結"),
+    ("digest_report.crypto_meta", "幣圈大總結"),
+    ("digest_report.semi_supply_chain_digest", "半導體供應鏈"),
+]
+
+
+def run_daily_recap():
+    """每日晨間快報：讀取昨天(不是今天——這是早上7點跑的T+1晨報，各
+    大總結頻道是前一晚才產出報告)已產出的報告，送Gemini壓縮成「只提供
+    明確重點」的精簡摘要，推播到Discord新頻道+Telegram(finfeed bot)。"""
+    key = "daily_recap"
+    webhook_url = os.getenv("WEBHOOK_DAILY_RECAP")
+    if not webhook_url:
+        logger.error("[%s] 缺少環境變數 WEBHOOK_DAILY_RECAP，跳過", key)
+        return
+
+    yesterday_str = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
+    reports = []
+    for source_id, channel_name in DAILY_RECAP_SOURCES:
+        text = db.get_summary_for_date(source_id, yesterday_str)
+        if text:
+            reports.append({"channel_name": channel_name, "report_text": text})
+
+    if not reports:
+        logger.info("[%s] 昨日(%s)尚無任何來源頻道報告可供彙整，跳過", key, yesterday_str)
+        return
+
+    angle = (
+        "把過去一天的重點濃縮成明確、精簡的摘要，不做投資建議、不需要"
+        "詳盡的分析過程，讀者要能在幾秒內抓到「昨天發生了什麼重要的事」。"
+    )
+    summary = ai_insight.build_meta_summary(angle, reports)
+    if not summary:
+        logger.error("[%s] Gemini彙整失敗（額度用盡/網路錯誤/回應格式不對），本次略過推播", key)
+        return
+
+    channel_title = "每日晨間快報"
+    embeds, omitted_count = digest_format.build_digest_embeds(summary, channel_title, yesterday_str)
+    all_ok = True
+    for i, embed in enumerate(embeds):
+        ok, status, err = send_webhook(webhook_url, embed)
+        if ok:
+            logger.info("[%s] 推播成功（訊息 %d/%d）", key, i + 1, len(embeds))
+        else:
+            all_ok = False
+            logger.error("[%s] 推播失敗（訊息 %d/%d）：HTTP %s %s", key, i + 1, len(embeds), status, err)
+
+    tg_points = "\n".join(f"• 【{p['category']}】{p['point']}" for p in summary["points"])
+    tg_text = (
+        f"☀️ *每日晨間快報（{yesterday_str}）*\n\n"
+        f"{summary['overview']}\n\n{tg_points}\n\n"
+        f"完整內容請至 Discord #每日晨間快報 查看"
+    )
+    notify_telegram.send_message(tg_text)
+
+    if all_ok:
+        logger.info(
+            "[%s] 完成，彙整 %d 個來源，共 %d 則Discord訊息%s",
+            key, len(reports), len(embeds),
+            f"（另有{omitted_count}則重點因篇幅省略）" if omitted_count else "",
+        )
+
+
 # 模擬持倉(紙上帳戶,使用者確認2026-07-30,見schema.sql同段落註解)：每個
 # 帳戶讀取對應大總結頻道「最近幾次」已產出的報告(不限定當天——tw_stock
 # 於台股收盤後13:30左右執行,當天晚上20:30才會有tw_stock_meta的新報告,
@@ -1276,6 +1362,25 @@ def run_portfolio_channel(key: str):
                 f"槓桿{leverage:g}x，動用現金{margin_used:,.2f}）：{a['reasoning']}"
             )
 
+    # 事件觸發機制(2026-07-31,使用者APPROVED,07-31再次確認擴及discretionary)：
+    # crypto_futures_portfolio/crypto_discretionary_portfolio都改成
+    # event-triggered排程(見check_triggers.py)，只有tw_stock_portfolio維持
+    # 原本排程不變，故next_trigger只在這兩個帳戶持久化。
+    if key in ("crypto_futures_portfolio", "crypto_discretionary_portfolio"):
+        next_trigger = decision.get("next_trigger") or {}
+        existing = db.get_portfolio_trigger(portfolio_id)
+        min_hours = existing["min_hours_between_calls"] if existing else 168.0
+        latest_trades = db.get_recent_trades(portfolio_id, limit=1)
+        latest_log_id = latest_trades[0]["log_id"] if latest_trades else None
+        db.set_portfolio_trigger(
+            portfolio_id,
+            json.dumps(next_trigger.get("price_triggers", [])),
+            json.dumps(next_trigger.get("news_keywords", [])),
+            min_hours,
+            latest_log_id,
+        )
+        logger.info("[%s] 已更新下次觸發條件：%s", key, next_trigger.get("reasoning", "(無說明)"))
+
     portfolio = db.get_portfolio(portfolio_id)
     final_positions = []
     for p in db.get_open_positions(portfolio_id):
@@ -1298,7 +1403,7 @@ def run_portfolio_channel(key: str):
 
 def main():
     parser = argparse.ArgumentParser(description="本地爬蟲 → Discord Webhook 推播")
-    parser.add_argument("--source", choices=list(SOURCE_REGISTRY.keys()) + ["all"]
+    parser.add_argument("--source", choices=list(SOURCE_REGISTRY.keys()) + ["all", "daily_recap"]
                                      + list(DIGEST_CHANNELS.keys()) + list(META_SUMMARY_CHANNELS.keys())
                                      + list(PORTFOLIO_CHANNELS.keys()),
                         help="執行單一來源（與 --scholarship 二選一）")
@@ -1326,6 +1431,8 @@ def main():
         run_meta_summary_channel(args.source)
     elif args.source in PORTFOLIO_CHANNELS:
         run_portfolio_channel(args.source)
+    elif args.source == "daily_recap":
+        run_daily_recap()
     elif args.source == "all":
         for key in SOURCE_REGISTRY:
             run_source(key)

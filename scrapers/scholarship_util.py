@@ -48,7 +48,7 @@ _DEFAULT_EXCLUDE = {
     },
     "grade_restricted": {
         "graduate_only": {
-            "zh": ["博士生", "研究生", "碩士"],
+            "zh": ["博士生", "研究生", "碩士", "研究所"],
             "en_regex": [
                 "\\bphd\\b",
                 "\\bmaster(?:'|\\u2019)?s?\\b",

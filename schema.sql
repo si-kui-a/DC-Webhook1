@@ -90,3 +90,15 @@ CREATE TABLE IF NOT EXISTS trade_log (
 
 CREATE INDEX IF NOT EXISTS idx_position_portfolio ON position(portfolio_id, status);
 CREATE INDEX IF NOT EXISTS idx_trade_log_portfolio ON trade_log(portfolio_id, trade_date);
+
+-- 加密貨幣交易決策「事件觸發」機制(2026-07-31,使用者APPROVED)。
+-- 市場面改重用scrapers/macro_fred.py既有的規則式警報邏輯(any_alert_triggered())，
+-- 不需要另外存欄位，故沒有pnl_trigger_pct欄位——市場面是全域判斷，不是逐投組參數。
+CREATE TABLE IF NOT EXISTS portfolio_trigger (
+    portfolio_id             TEXT PRIMARY KEY REFERENCES portfolio(portfolio_id),
+    price_triggers           TEXT NOT NULL DEFAULT '[]',  -- JSON: [{"symbol":"BTCUSDT","above":X,"below":Y}]
+    news_keywords            TEXT NOT NULL DEFAULT '[]',  -- JSON array
+    min_hours_between_calls  REAL NOT NULL DEFAULT 168,   -- 保底機制,預設1週(使用者確認2026-07-31)
+    set_at                   TEXT NOT NULL,
+    set_by_trade_log_id      INTEGER REFERENCES trade_log(log_id)
+);

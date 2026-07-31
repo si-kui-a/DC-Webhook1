@@ -83,6 +83,17 @@ def _build_summary(record: dict) -> str:
     return "\n".join(parts)
 
 
+def _parse_salary_high(record: dict) -> float | None:
+    """薪資上限(NT_U)供internship_util的高薪加分規則比對用(2026-07-31新增)。
+    原始欄位是字串,空值/非數字一律視為無資料,不影響其餘篩選邏輯。"""
+    raw = record.get("NT_U（薪資範圍上限）")
+    try:
+        value = float(raw)
+        return value if value > 0 else None
+    except (TypeError, ValueError):
+        return None
+
+
 def fetch() -> list[dict]:
     """回傳全部1000筆原始職缺(正規化欄位)，是否為實習職缺由main.py用
     internship_util.is_relevant()篩選，與scholarship_*.py的既有分工一致。"""
@@ -107,6 +118,8 @@ def fetch() -> list[dict]:
                 r.get("JOB_DETAIL（工作內容）") or "",
                 r.get("CJOB_NAME2（職務小類別名稱）") or "",
             ]),
+            # 供main.py高薪加分規則用的原始數字欄位，同樣不進db.item表。
+            "_salary_high": _parse_salary_high(r),
         })
     return items
 

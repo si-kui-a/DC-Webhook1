@@ -220,6 +220,26 @@ def _fetch_liquidity() -> dict | None:
     }
 
 
+def any_alert_triggered() -> bool:
+    """供check_triggers.py(加密貨幣事件觸發機制)的「市場面」條件重用——
+    直接沿用_check_alert()同一套規則式閥值(VIX/殖利率/信用利差/那斯達克/
+    費半),不重造判斷邏輯、不依賴fetch()每日排程寫入db的時機。純規則,
+    零AI。任一序列抓取失敗視為未觸發(不因單一序列故障就誤報全面警報)。"""
+    for key, (series_id, _label, _unit) in SERIES.items():
+        if key in DISPLAY_ONLY_SERIES:
+            continue
+        try:
+            rows = _fetch_series(series_id)
+        except requests.RequestException:
+            continue
+        if len(rows) < 2:
+            continue
+        (_, prev), (_, latest) = rows[-2], rows[-1]
+        if _check_alert(key, latest, latest - prev, rows):
+            return True
+    return False
+
+
 def fetch() -> list[dict]:
     """抓取三項總經指標最新值+日變動,組成一篇每日追蹤報告。任一指標觸發
     閥值就整篇標記telegram_alert=True(讓使用者看到完整脈絡,不只片段

@@ -17,18 +17,21 @@ FIELD_VALUE_MAX = 1024
 
 
 def _point_to_lines(p: dict) -> str:
-    """引用文字另起一行放來源連結(不是接在引用同一行後面)，方便閱讀時
-    視覺上一眼看到「這句話出自哪裡、點哪裡查證」。"""
+    """來源網址獨立於quote之外一律顯示(2026-07-31修正)：原本url只在有
+    quote時才輸出，但AI允許quote留空("沒有適合的引用就留空字串")，導致
+    沒有引用的重點完全不附來源網址——使用者確認多篇貼文統整的推播都
+    要附來源網址，不應該取決於有沒有引用原文。引用文字另起一行放來源
+    連結(不是接在引用同一行後面)，方便閱讀時一眼看到「這句話出自哪裡」。"""
     lines = [f"• {p['point']}"]
     if p.get("quote"):
         src = p.get("source_name") or ""
         title = p.get("source_title") or ""
-        url = p.get("source_url") or ""
         attribution = f" —— {src}" if src else ""
         attribution += f"《{title}》" if title else ""
         lines.append(f'  > "{p["quote"]}"' + attribution)
-        if url:
-            lines.append(f"  {url}")
+    url = p.get("source_url") or ""
+    if url:
+        lines.append(f"  {url}")
     return "\n".join(lines)
 
 

@@ -93,6 +93,12 @@ New-IntelPusherTask -Name 'IntelPusher-CryptoDiscretionaryPortfolio' -Source 'cr
 New-IntelPusherFlagTask -Name 'IntelPusher-Internship' -Flag 'internship' `
     -Trigger (New-ScheduledTaskTrigger -Daily -At 9:00AM)
 
+# 每日晨間快報(每天07:00,使用者2026-07-31確認的時間——早於所有其他
+# 07:00後才開始的排程，讀取「昨天」已產出的大總結報告，見main.py
+# run_daily_recap)。
+New-IntelPusherTask -Name 'IntelPusher-DailyRecap' -Source 'daily_recap' `
+    -Trigger (New-ScheduledTaskTrigger -Daily -At 7:00AM)
+
 # 履歷配對Discord常駐bot(2026-07-31新增)。跟以上所有任務都不同性質——
 # 這支是要「一直開著」的WebSocket連線process，不是排程批次執行一次就
 # 結束，故用AtLogOn觸發(登入時啟動一次)+RestartCount設定(當機/斷線

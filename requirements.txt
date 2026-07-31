@@ -5,7 +5,9 @@ cryptography>=42.0
 truststore>=0.9
 
 # 本地摘要功能（抽取式演算法，非LLM，無雲端API）：
-# cbc（中文）用 textrank4zh；fed/tsmc（英文）用 sumy LexRank
+# cbc（中文）用 textrank4zh；fed/tsmc（英文）用 sumy LexRank；
+# resume_matcher.py的Layer 1本地關鍵字比對也重用jieba+textrank4zh內建
+# 停用詞表，不新增依賴。
 jieba>=0.42
 sumy>=0.12
 nltk>=3.9

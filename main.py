@@ -53,6 +53,7 @@ from scrapers import scholarship_daad, scholarship_moe, scholarship_thu, scholar
 from scrapers import scholarship_util
 from scrapers import internship_mol
 from scrapers import internship_104
+from scrapers import internship_518
 from scrapers import internship_util
 
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
@@ -105,11 +106,14 @@ SCHOLARSHIP_REGISTRY = {
 # 規則已套用(2026-07-31，見internship_util.is_relevant())。104用關鍵字
 # "實習"直接呼叫官方站內搜尋API(見internship_104.py)，命中率比MOL的
 # 全量快照+本地篩選高很多(實測約77% vs 1%)，因為104自己的搜尋引擎已經
-# 先做過一次相關性排序。1111人力銀行技術上更複雜(無法確認是否需要
-# CSRF token/Selenium)，先不做，之後有需要再評估。
+# 先做過一次相關性排序。518(見internship_518.py)無CAPTCHA但實測偏服務業/
+# 兼職，同一天的「實習」搜尋結果實測命中率0%(遠低於104)，先備而不用，
+# 不會主動洗版(0筆新項目不會推播)。1111人力銀行有主動的CAPTCHA/反爬蟲
+# 挑戰機制(altcha widget)，明確不做(見2026-07-31對話紀錄的界線說明)。
 INTERNSHIP_REGISTRY = {
     "internship_mol": (internship_mol.fetch, internship_mol.SOURCE_NAME, internship_mol.SOURCE_ID),
     "internship_104": (internship_104.fetch, internship_104.SOURCE_NAME, internship_104.SOURCE_ID),
+    "internship_518": (internship_518.fetch, internship_518.SOURCE_NAME, internship_518.SOURCE_ID),
 }
 
 # 連續失敗超過此次數，視為需要人工介入（用於未來接外部告警，本 MVP 先只記 log）

@@ -56,6 +56,7 @@ from scrapers import internship_104
 from scrapers import internship_518
 from scrapers import internship_rich
 from scrapers import internship_yes123
+from scrapers import internship_gift
 from scrapers import internship_util
 
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
@@ -124,6 +125,7 @@ INTERNSHIP_REGISTRY = {
     "internship_518": (internship_518.fetch, internship_518.SOURCE_NAME, internship_518.SOURCE_ID, False),
     "internship_rich": (internship_rich.fetch, internship_rich.SOURCE_NAME, internship_rich.SOURCE_ID, True),
     "internship_yes123": (internship_yes123.fetch, internship_yes123.SOURCE_NAME, internship_yes123.SOURCE_ID, False),
+    "internship_gift": (internship_gift.fetch, internship_gift.SOURCE_NAME, internship_gift.SOURCE_ID, False),
 }
 
 # 連續失敗超過此次數，視為需要人工介入（用於未來接外部告警，本 MVP 先只記 log）

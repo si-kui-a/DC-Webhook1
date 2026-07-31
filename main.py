@@ -100,10 +100,9 @@ SCHOLARSHIP_REGISTRY = {
     "scholarship_efg": (scholarship_efg.fetch, scholarship_efg.SOURCE_NAME, scholarship_efg.SOURCE_ID),
 }
 
-# 台灣實習頻道(比照獎學金頻道模式,使用者確認2026-07-30；科系與資歷不設限，
-# 不套用scholarship_util那套學校/年級/身份別排除規則，只用internship_util
-# 關鍵字計分判斷是否為實習職缺)。目前只有MOL一個來源，仍沿用registry字典
-# 結構以利未來擴充第二個來源。
+# 台灣實習頻道(比照獎學金頻道模式)。科系/資歷/學校/年級/國籍/身份別排除
+# 規則已套用(2026-07-31，見internship_util.is_relevant())。目前只有MOL
+# 一個來源，仍沿用registry字典結構以利未來擴充第二個來源。
 INTERNSHIP_REGISTRY = {
     "internship_mol": (internship_mol.fetch, internship_mol.SOURCE_NAME, internship_mol.SOURCE_ID),
 }
@@ -572,9 +571,10 @@ def _build_internship_batch(items_by_source: dict[str, list[dict]]) -> list[str]
 
 
 def run_internship():
-    """台灣實習頻道：比照run_scholarship()的批次執行模式，但不套用
-    scholarship_util的學校/年級/身份別排除規則(科系與資歷不設限，使用者
-    確認2026-07-30)，只用internship_util關鍵字計分判斷是否為實習職缺。"""
+    """台灣實習頻道：比照run_scholarship()的批次執行模式。全部篩選(關鍵字
+    計分+學校/年級/國籍/身份別/科系/行業/語意噪音)都在internship_util.
+    is_relevant()裡規則式完成，零AI依賴(2026-07-31移除原本的Gemini語意
+    消歧步驟，見internship_util.py模組docstring)。"""
     webhook_url = os.getenv(INTERNSHIP_WEBHOOK_ENV)
     if not webhook_url:
         logger.error("缺少環境變數 %s，跳過實習批次", INTERNSHIP_WEBHOOK_ENV)
@@ -624,7 +624,6 @@ def run_internship():
                 db.mark_seeded_historical(item["item_id"])
                 continue
 
-            item["_filter_text"] = filter_text  # 供下面AI語意消歧用，不進db
             new_for_source.append(item)
             pushed_count += 1
 
@@ -636,33 +635,6 @@ def run_internship():
     if total_new == 0:
         logger.info("實習批次完成，無新項目")
         return
-
-    # 語意消歧：「實習」在中文職缺文本裡是多義詞(試用期/應徵資格要求/設施
-    # 名稱/HR職務描述都可能誤中關鍵字)，關鍵字過濾後的候選量少(通常
-    # <20筆)，值得呼叫一次Gemini做最終判斷。失敗時退回沿用關鍵字過濾結果，
-    # 不因AI失敗就整批不推播(見ai_insight.classify_internships())。
-    all_candidates = [
-        {"url": it["url"], "title": it["title"], "detail": it.get("_filter_text", "")}
-        for items in new_items_by_source.values() for it in items
-    ]
-    genuine_urls = ai_insight.classify_internships(all_candidates)
-    if genuine_urls is not None:
-        filtered_by_source = {}
-        for source_name, items in new_items_by_source.items():
-            kept, dropped = [], []
-            for it in items:
-                (kept if it["url"] in genuine_urls else dropped).append(it)
-            for it in dropped:
-                db.mark_seeded_historical(it["item_id"])
-            if kept:
-                filtered_by_source[source_name] = kept
-        new_items_by_source = filtered_by_source
-        total_new = sum(len(v) for v in new_items_by_source.values())
-        if total_new == 0:
-            logger.info("實習批次完成，AI語意判斷後無真實實習職缺")
-            return
-    else:
-        logger.warning("實習AI語意判斷失敗，退回沿用關鍵字過濾結果（%d 筆）", total_new)
 
     chunks = _build_internship_batch(new_items_by_source)
     if not chunks:

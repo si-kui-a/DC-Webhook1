@@ -10,6 +10,14 @@ scholarship_util.py既有函式(同一份config/scholarship_profile.json,同一�
 人的條件,不另開設定檔);科系是新增維度(見is_excluded_by_major,
 scholarship_util沒有這個,獎學金較少寫死指定科系,實習職缺常見「限OO
 相關科系」)。
+
+2026-07-31再修正(移除AI依賴):原本main.py在關鍵字過濾後還會呼叫
+ai_insight.classify_internships()做一次Gemini語意消歧,抓「實習」在職缺
+文本裡的4種常見假陽性(試用期話術/應徵資格要求/設施名稱/HR管理職敘述)。
+該AI呼叫在正式環境撞過一次HTTP 429完全失效,退回用純關鍵字結果推播,
+導致這4種假陽性當天全部被推播。改用regex在_is_semantic_noise()裡直接
+規則式判斷這4種樣式(patterns從真實推播過的資料反查得出),完全移除這次
+AI呼叫，見已刪除的ai_insight.classify_internships()。
 """
 import json
 import logging
@@ -127,11 +135,21 @@ def is_excluded_by_major(text: str, profile: dict | None = None) -> bool:
     return not any(alias in required or required in alias for alias in aliases)
 
 
-def _is_probation_period_noise(text: str, matched: list[str]) -> bool:
-    """排除「N個月實習期/實習期間」這種新人試用期慣用句型——這種情況下
-    matched通常只會命中最泛用的「實習」二字本身，其餘更明確的複合詞/
-    regex都不會命中。只有兩個條件同時成立(命中noise_regex且僅靠「實習」
-    二字達標)才排除，避免誤殺「工讀生｜實習」這種真實但用詞分散的職缺。"""
+def _is_semantic_noise(text: str, matched: list[str]) -> bool:
+    """規則式語意排除(2026-07-31擴大，取代原本的AI語意消歧步驟，見
+    ai_insight.py移除的classify_internships())。涵蓋4種「實習」在中文
+    職缺文本裡的常見假陽性樣式：(a)新人試用期/教育訓練話術、(b)應徵資格
+    要求「具...實習經驗」(要求應徵者已有實習經歷，不是提供實習)、
+    (c)實習工場/教室等設施名稱、(d)「規劃/負責...實習專案」這類HR管理職
+    敘述(是要應徵者去管理別人的實習，不是本身是實習)——全部regex都是從
+    真實推播過的資料反查得出，見config/internship_keywords.json的
+    noise_regex。
+
+    只有兩個條件同時成立(命中上述任一noise_regex且matched只有裸字
+    「實習」二字)才排除，避免誤殺「工讀生｜實習」「實習生」這種命中
+    更明確複合詞的真實職缺——這個保守子集範圍比單純規則式全面替代AI
+    小很多，precision因此比2026-07-30測過的純規則版本(約60%)更有把握，
+    但仍然是規則式而非語意理解，之後遇到新的真實漏網案例再逐步補規則。"""
     data = _load_keywords()
     noise_patterns = data.get("noise_regex", [])
     if not noise_patterns:
@@ -148,7 +166,7 @@ def is_relevant(text: str, min_score: int | None = None, salary: float | None = 
     threshold = min_score if min_score is not None else data.get("threshold", 2)
     if score_title(text, salary) < threshold:
         return False
-    if _is_probation_period_noise(text, get_matched_keywords(text)):
+    if _is_semantic_noise(text, get_matched_keywords(text)):
         return False
     if _is_excluded_industry(text):
         return False

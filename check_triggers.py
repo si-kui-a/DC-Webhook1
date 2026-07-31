@@ -43,6 +43,22 @@ from scrapers import macro_fred, substack_generic
 logger = logging.getLogger("check_triggers")
 
 PORTFOLIO_KEYS = ["crypto_futures_portfolio", "crypto_discretionary_portfolio"]
+
+# 「首次執行」重試退避(2026-07-31使用者確認，修正實測踩到的bug)：AI失敗
+# 時portfolio_trigger從頭到尾不會被寫入(只有成功才會set_portfolio_trigger)，
+# 若不額外記錄「上次嘗試時間」，每20分鐘的check_triggers排程會一直判定成
+# 「尚無觸發條件紀錄=首次執行」不斷重試——2026-07-31實測踩過：早上10:33到
+# 下午15:12連續14次重試，額度用盡還拖累tw_stock_portfolio當天的Gemini呼叫
+# 失敗。這裡刻意不重用portfolio_trigger表本身記錄嘗試時間(那張表的
+# min_hours_between_calls會被run_portfolio_channel()的「成功後沿用舊值」
+# 邏輯繼續帶下去，寫一筆2小時的暫時值會永久污染掉之後應有的168小時週期)，
+# 改用source表的last_fetched_at欄位(db.get_source/record_fetch_success)
+# 單純標記「上次嘗試時間」，跟portfolio_trigger的語意完全分開。
+FIRST_RUN_RETRY_BACKOFF_HOURS = 2.0
+
+
+def _retry_source_id(portfolio_id: str) -> str:
+    return f"portfolio_retry.{portfolio_id}"
 # 消息面比對用的新聞來源，跟main.py的crypto_digest頻道共用同一批
 # substack來源(見main.py DIGEST_CHANNELS["crypto_digest"]["source_ids"])，
 # 兩個帳戶共用同一批新聞來源，各自的news_keywords不同。
@@ -86,7 +102,26 @@ def _check_one(portfolio_key: str, market_alert: bool) -> bool:
     trigger = db.get_portfolio_trigger(portfolio_id)
 
     if trigger is None:
+        retry_source_id = _retry_source_id(portfolio_id)
+        last_attempt = db.get_source(retry_source_id)
+        if last_attempt and last_attempt.get("last_fetched_at"):
+            attempted_at = datetime.fromisoformat(last_attempt["last_fetched_at"])
+            if attempted_at.tzinfo is None:
+                attempted_at = attempted_at.replace(tzinfo=timezone.utc)
+            hours_since_attempt = (datetime.now(timezone.utc) - attempted_at).total_seconds() / 3600
+            if hours_since_attempt < FIRST_RUN_RETRY_BACKOFF_HOURS:
+                logger.info(
+                    "[%s] 尚無觸發條件紀錄，但距上次嘗試僅%.1f小時(退避%.0f小時)，暫緩重試",
+                    portfolio_id, hours_since_attempt, FIRST_RUN_RETRY_BACKOFF_HOURS,
+                )
+                return False
+
         logger.info("[%s] 尚無觸發條件紀錄(首次執行)，直接呼叫AI決策一次", portfolio_id)
+        # 呼叫AI前先標記嘗試時間——AI若失敗，portfolio_trigger不會被寫入，
+        # 但這筆嘗試時間會擋下接下來FIRST_RUN_RETRY_BACKOFF_HOURS小時內的
+        # 重試，不會每20分鐘就再打一次(見模組頂部設計說明)。
+        db.upsert_source(retry_source_id, f"{portfolio_id}首次執行重試標記", "portfolio_retry", "")
+        db.record_fetch_success(retry_source_id)
         main.run_portfolio_channel(portfolio_key)
         return True
 

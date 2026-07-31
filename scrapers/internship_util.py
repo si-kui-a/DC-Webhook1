@@ -101,16 +101,19 @@ def _is_excluded_industry(text: str) -> bool:
 
 
 def _is_excluded_by_profile(text: str) -> bool:
-    """學校/年級/國籍/身份別排除(2026-07-31使用者確認套用)——直接重用
-    scholarship_util既有規則+同一份config/scholarship_profile.json(同一個
-    人的條件,不重複維護一份設定)。這幾個函式本身是純文字/regex比對,不是
-    寫死給獎學金專用,套用在實習職缺文本上一樣成立。"""
+    """學校/年級/國籍/身份別/戶籍排除(2026-07-31使用者確認套用；戶籍
+    排除2026-07-31補上，原本scholarship_util就有is_excluded_by_residence()
+    這個函式，只是internship_util沒呼叫到，是遺漏不是設計決定)——直接
+    重用scholarship_util既有規則+同一份config/scholarship_profile.json
+    (同一個人的條件,不重複維護一份設定)。這幾個函式本身是純文字/regex
+    比對,不是寫死給獎學金專用,套用在實習職缺文本上一樣成立。"""
     profile = scholarship_util.load_profile()
     return (
         scholarship_util.is_excluded_by_school(text, profile)
         or scholarship_util.is_excluded_by_grade(text, profile)
         or scholarship_util.is_excluded_by_nationality(text, profile)
         or scholarship_util.is_excluded_by_special_status(text, profile)
+        or scholarship_util.is_excluded_by_residence(text, profile)
     )
 
 

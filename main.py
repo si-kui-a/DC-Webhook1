@@ -54,6 +54,7 @@ from scrapers import scholarship_util
 from scrapers import internship_mol
 from scrapers import internship_104
 from scrapers import internship_518
+from scrapers import internship_rich
 from scrapers import internship_util
 
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
@@ -110,10 +111,17 @@ SCHOLARSHIP_REGISTRY = {
 # 兼職，同一天的「實習」搜尋結果實測命中率0%(遠低於104)，先備而不用，
 # 不會主動洗版(0筆新項目不會推播)。1111人力銀行有主動的CAPTCHA/反爬蟲
 # 挑戰機制(altcha widget)，明確不做(見2026-07-31對話紀錄的界線說明)。
+#
+# registry值的第4個欄位skip_keyword_gate：RICH(教育部青年署見習/工讀
+# 平台，見internship_rich.py)整體只有十幾筆職缺，且官方用語是「見習/
+# 工讀」不是「實習」，用「實習」關鍵字計分門檻會把整個來源擋光——這個
+# 來源改用internship_util.passes_profile_filters()，跳過關鍵字門檻，
+# 只套用學校/年級/國籍/身份別/科系/行業別排除規則。
 INTERNSHIP_REGISTRY = {
-    "internship_mol": (internship_mol.fetch, internship_mol.SOURCE_NAME, internship_mol.SOURCE_ID),
-    "internship_104": (internship_104.fetch, internship_104.SOURCE_NAME, internship_104.SOURCE_ID),
-    "internship_518": (internship_518.fetch, internship_518.SOURCE_NAME, internship_518.SOURCE_ID),
+    "internship_mol": (internship_mol.fetch, internship_mol.SOURCE_NAME, internship_mol.SOURCE_ID, False),
+    "internship_104": (internship_104.fetch, internship_104.SOURCE_NAME, internship_104.SOURCE_ID, False),
+    "internship_518": (internship_518.fetch, internship_518.SOURCE_NAME, internship_518.SOURCE_ID, False),
+    "internship_rich": (internship_rich.fetch, internship_rich.SOURCE_NAME, internship_rich.SOURCE_ID, True),
 }
 
 # 連續失敗超過此次數，視為需要人工介入（用於未來接外部告警，本 MVP 先只記 log）
@@ -595,7 +603,7 @@ def run_internship():
     new_items_by_source: dict[str, list[dict]] = {}
     total_new = 0
 
-    for key, (fetch_fn, source_name, source_id) in INTERNSHIP_REGISTRY.items():
+    for key, (fetch_fn, source_name, source_id, skip_keyword_gate) in INTERNSHIP_REGISTRY.items():
         db.upsert_source(source_id, source_name, "internship", "")
         try:
             raw_items = fetch_fn()
@@ -625,7 +633,11 @@ def run_internship():
                 continue  # 已存在
 
             filter_text = raw.get("_filter_text") or raw["title"]
-            if not internship_util.is_relevant(filter_text, salary=raw.get("_salary_high")):
+            if skip_keyword_gate:
+                relevant = internship_util.passes_profile_filters(filter_text)
+            else:
+                relevant = internship_util.is_relevant(filter_text, salary=raw.get("_salary_high"))
+            if not relevant:
                 db.mark_seeded_historical(item["item_id"])
                 continue
 

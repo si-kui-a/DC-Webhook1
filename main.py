@@ -367,6 +367,15 @@ SCHOLARSHIP_FIRST_RUN_CAP = 20
 INTERNSHIP_WEBHOOK_ENV = "WEBHOOK_INTERNSHIP"
 INTERNSHIP_FIRST_RUN_CAP = 20
 
+# 台灣求職頻道(2026-07-31新增，使用者確認)：跟實習頻道共用INTERNSHIP_
+# REGISTRY同一批來源，同一次fetch分兩桶分別推播(見run_internship())，
+# 不另外增加對外API呼叫量。104/518/yes123/gift的原始資料本來就是用
+# 「實習」關鍵字搜出來的，套用internship_util.is_relevant_job_search()
+# (反向排除實習關鍵字)後幾乎全數會被排除，這個頻道實質上以MOL(全國
+# 職缺無關鍵字限制的廣泛快照)為主要供稿來源，使用者已確認接受此取捨。
+JOB_SEARCH_WEBHOOK_ENV = "WEBHOOK_JOB_SEARCH"
+JOB_SEARCH_FIRST_RUN_CAP = 20
+
 
 def _build_scholarship_batch(items_by_source: dict[str, list[dict]]) -> list[str]:
     """
@@ -564,10 +573,12 @@ def run_scholarship():
     )
 
 
-def _build_internship_batch(items_by_source: dict[str, list[dict]]) -> list[str]:
-    """比照_build_scholarship_batch()的組裝邏輯，只是文案改成實習。"""
+def _build_internship_batch(items_by_source: dict[str, list[dict]], title: str = "💼 台灣實習快報") -> list[str]:
+    """比照_build_scholarship_batch()的組裝邏輯，只是文案改成實習。title
+    參數(2026-07-31新增)讓求職頻道(run_internship()裡的job_search分桶)
+    重用同一組裝邏輯，不用複製一份幾乎一樣的函式。"""
     date_str = datetime.now().strftime("%Y-%m-%d")
-    header = f"💼 *台灣實習快報* | {date_str}"
+    header = f"*{title}* | {date_str}"
     full_lines = [header, ""]
 
     for source_name, items in items_by_source.items():
@@ -576,9 +587,9 @@ def _build_internship_batch(items_by_source: dict[str, list[dict]]) -> list[str]
         full_lines.append("━━━━━━━━━━━━━")
         full_lines.append(f"*【{source_name}】*（{len(items)} 筆）")
         for item in items:
-            title = item["title"][:120]
+            title_text = item["title"][:120]
             url = item.get("url", "")
-            full_lines.append(f"• [{title}]({url})" if url else f"• {title}")
+            full_lines.append(f"• [{title_text}]({url})" if url else f"• {title_text}")
 
     full_text = "\n".join(full_lines)
     if not full_text.strip():
@@ -591,12 +602,12 @@ def _build_internship_batch(items_by_source: dict[str, list[dict]]) -> list[str]
     current = [header, ""]
     for source_name, items in items_by_source.items():
         for item in items:
-            title = item["title"][:120]
+            title_text = item["title"][:120]
             url = item.get("url", "")
-            line = f"• [{title}]({url})" if url else f"• {title}"
+            line = f"• [{title_text}]({url})" if url else f"• {title_text}"
             if len("\n".join(current + [line])) > 3900:
                 chunks.append("\n".join(current))
-                current = [f"💼 *台灣實習快報*（續）| {date_str}", "", line]
+                current = [f"*{title}*（續）| {date_str}", "", line]
             else:
                 current.append(line)
     if len(current) > 2:
@@ -604,21 +615,86 @@ def _build_internship_batch(items_by_source: dict[str, list[dict]]) -> list[str]
     return chunks
 
 
+def _push_internship_style_batch(
+    webhook_url: str,
+    items_by_source: dict[str, list[dict]],
+    total_new: int,
+    embed_title: str,
+    footer: str,
+    tg_header: str,
+    tg_channel_hint: str,
+):
+    """實習頻道/求職頻道共用的推播+標記+Telegram通知邏輯(2026-07-31抽出，
+    避免run_internship()裡兩個頻道各自複製一份幾乎一樣的程式碼)。"""
+    chunks = _build_internship_batch(items_by_source, title=embed_title)
+    if not chunks:
+        logger.warning("%s 文字組裝失敗（可能為空）", embed_title)
+        return
+
+    all_ok = True
+    for i, chunk in enumerate(chunks):
+        embed = build_embed(
+            title=f"{embed_title}{'（續）' if i > 0 else ''}",
+            description=chunk,
+            url="",
+            footer=footer,
+        )
+        ok, status, err = send_webhook(webhook_url, embed)
+        if ok:
+            logger.info("%s 推播成功（chunk %d/%d）", embed_title, i + 1, len(chunks))
+        else:
+            all_ok = False
+            logger.error("%s 推播失敗（chunk %d/%d）: HTTP %s %s", embed_title, i + 1, len(chunks), status, err)
+
+    # 標記已推播(同run_scholarship()的PAT-03修正，2026-07-30發現兩處都漏了)。
+    if all_ok:
+        for items in items_by_source.values():
+            for item in items:
+                db.mark_published(item["item_id"])
+
+    # 比照run_scholarship()的Telegram簡短通知模式(使用者確認2026-07-30
+    # 加上)，同樣用Schule mithelfer bot(教育類，跟財經的finfeed bot分開)。
+    source_summary = "、".join(
+        f"{name}（{len(items)} 筆）"
+        for name, items in items_by_source.items()
+        if items
+    )
+    tg_brief = (
+        f"{tg_header}\n"
+        f"共 {total_new} 筆新項目\n"
+        f"來源：{source_summary}\n\n"
+        f"完整內容請至 Discord {tg_channel_hint} 查看"
+    )
+    notify_telegram.send_message(
+        tg_brief,
+        bot_token=notify_telegram.TELEGRAM_EDU_BOT_TOKEN,
+        chat_id=notify_telegram.TELEGRAM_EDU_CHAT_ID,
+    )
+
+
 def run_internship():
-    """台灣實習頻道：比照run_scholarship()的批次執行模式。全部篩選(關鍵字
-    計分+學校/年級/國籍/身份別/科系/行業/語意噪音)都在internship_util.
-    is_relevant()裡規則式完成，零AI依賴(2026-07-31移除原本的Gemini語意
-    消歧步驟，見internship_util.py模組docstring)。"""
-    webhook_url = os.getenv(INTERNSHIP_WEBHOOK_ENV)
-    if not webhook_url:
-        logger.error("缺少環境變數 %s，跳過實習批次", INTERNSHIP_WEBHOOK_ENV)
+    """台灣實習頻道+台灣求職頻道(2026-07-31新增求職頻道，使用者確認)：
+    兩個頻道共用INTERNSHIP_REGISTRY同一批來源，同一次fetch分類成兩桶
+    分別推播，不對外多打一次API。實習頻道全部篩選(關鍵字計分+學校/年級/
+    國籍/身份別/科系/行業/語意噪音)在internship_util.is_relevant()完成；
+    求職頻道用internship_util.is_relevant_job_search()——同一套profile/
+    科系/行業排除規則，但反向排除任何命中實習關鍵字的項目，避免同一則
+    職缺兩邊都推。skip_keyword_gate來源(RICH，本身是見習/工讀專屬平台)
+    只服務實習頻道，不進求職頻道的候選池。零AI依賴(2026-07-31移除原本
+    的Gemini語意消歧步驟，見internship_util.py模組docstring)。"""
+    internship_webhook = os.getenv(INTERNSHIP_WEBHOOK_ENV)
+    job_search_webhook = os.getenv(JOB_SEARCH_WEBHOOK_ENV)
+    if not internship_webhook and not job_search_webhook:
+        logger.error("缺少環境變數 %s 與 %s，跳過實習/求職批次", INTERNSHIP_WEBHOOK_ENV, JOB_SEARCH_WEBHOOK_ENV)
         return
 
     internship_util.invalidate_cache()
     is_first_run = all(db.count_items_for_source(info[2]) == 0 for info in INTERNSHIP_REGISTRY.values())
 
-    new_items_by_source: dict[str, list[dict]] = {}
-    total_new = 0
+    internship_items_by_source: dict[str, list[dict]] = {}
+    job_search_items_by_source: dict[str, list[dict]] = {}
+    internship_total = 0
+    job_search_total = 0
 
     for key, (fetch_fn, source_name, source_id, skip_keyword_gate) in INTERNSHIP_REGISTRY.items():
         db.upsert_source(source_id, source_name, "internship", "")
@@ -634,9 +710,12 @@ def run_internship():
             logger.info("[%s] 無資料", key)
             continue
 
-        new_for_source = []
-        push_cap = INTERNSHIP_FIRST_RUN_CAP if is_first_run else None
-        pushed_count = 0
+        internship_for_source = []
+        job_search_for_source = []
+        internship_cap = INTERNSHIP_FIRST_RUN_CAP if is_first_run else None
+        job_search_cap = JOB_SEARCH_FIRST_RUN_CAP if is_first_run else None
+        internship_pushed = 0
+        job_search_pushed = 0
 
         for raw in raw_items:
             item = db.insert_item_if_new(
@@ -650,74 +729,69 @@ def run_internship():
                 continue  # 已存在
 
             filter_text = raw.get("_filter_text") or raw["title"]
+
             if skip_keyword_gate:
-                relevant = internship_util.passes_profile_filters(filter_text)
+                is_internship = internship_util.passes_profile_filters(filter_text)
             else:
-                relevant = internship_util.is_relevant(filter_text, salary=raw.get("_salary_high"))
-            if not relevant:
+                is_internship = internship_util.is_relevant(filter_text, salary=raw.get("_salary_high"))
+
+            if is_internship:
+                if internship_cap is not None and internship_pushed >= internship_cap:
+                    db.mark_seeded_historical(item["item_id"])
+                else:
+                    internship_for_source.append(item)
+                    internship_pushed += 1
+                continue
+
+            # 不是實習才考慮求職頻道；skip_keyword_gate來源(RICH)本身定位
+            # 就是見習/工讀專屬平台，不適合當一般職缺池，維持只服務實習
+            # 頻道的角色。
+            if skip_keyword_gate:
                 db.mark_seeded_historical(item["item_id"])
                 continue
 
-            if push_cap is not None and pushed_count >= push_cap:
+            if not internship_util.is_relevant_job_search(filter_text):
                 db.mark_seeded_historical(item["item_id"])
                 continue
 
-            new_for_source.append(item)
-            pushed_count += 1
+            if job_search_cap is not None and job_search_pushed >= job_search_cap:
+                db.mark_seeded_historical(item["item_id"])
+            else:
+                job_search_for_source.append(item)
+                job_search_pushed += 1
 
-        if new_for_source:
-            new_items_by_source[source_name] = new_for_source
-            total_new += len(new_for_source)
-            logger.info("[%s] 新項目 %d 筆", key, len(new_for_source))
+        if internship_for_source:
+            internship_items_by_source[source_name] = internship_for_source
+            internship_total += len(internship_for_source)
+            logger.info("[%s] 實習頻道新項目 %d 筆", key, len(internship_for_source))
+        if job_search_for_source:
+            job_search_items_by_source[source_name] = job_search_for_source
+            job_search_total += len(job_search_for_source)
+            logger.info("[%s] 求職頻道新項目 %d 筆", key, len(job_search_for_source))
 
-    if total_new == 0:
-        logger.info("實習批次完成，無新項目")
+    if internship_total == 0 and job_search_total == 0:
+        logger.info("實習/求職批次完成，無新項目")
         return
 
-    chunks = _build_internship_batch(new_items_by_source)
-    if not chunks:
-        logger.warning("實習批次文字組裝失敗（可能為空）")
-        return
-
-    all_ok = True
-    for i, chunk in enumerate(chunks):
-        embed = build_embed(
-            title=f"💼 台灣實習快報{'（續）' if i > 0 else ''}",
-            description=chunk,
-            url="",
-            footer="台灣實習監控",
-        )
-        ok, status, err = send_webhook(webhook_url, embed)
-        if ok:
-            logger.info("實習批次推播成功（chunk %d/%d）", i + 1, len(chunks))
+    if internship_total:
+        if internship_webhook:
+            _push_internship_style_batch(
+                internship_webhook, internship_items_by_source, internship_total,
+                embed_title="💼 台灣實習快報", footer="台灣實習監控",
+                tg_header="💼 *台灣實習快報已更新*", tg_channel_hint="#台灣實習情報",
+            )
         else:
-            all_ok = False
-            logger.error("實習批次推播失敗（chunk %d/%d）: HTTP %s %s", i + 1, len(chunks), status, err)
+            logger.error("缺少環境變數 %s，實習頻道 %d 筆新項目未推播", INTERNSHIP_WEBHOOK_ENV, internship_total)
 
-    # 標記已推播(同run_scholarship()的PAT-03修正，2026-07-30發現兩處都漏了)。
-    if all_ok:
-        for items in new_items_by_source.values():
-            for item in items:
-                db.mark_published(item["item_id"])
-
-    # 比照run_scholarship()的Telegram簡短通知模式(使用者確認2026-07-30
-    # 加上)，同樣用Schule mithelfer bot(教育類，跟財經的finfeed bot分開)。
-    source_summary = "、".join(
-        f"{name}（{len(items)} 筆）"
-        for name, items in new_items_by_source.items()
-        if items
-    )
-    tg_brief = (
-        f"💼 *台灣實習快報已更新*\n"
-        f"共 {total_new} 筆新項目\n"
-        f"來源：{source_summary}\n\n"
-        f"完整內容請至 Discord #台灣實習情報查看"
-    )
-    notify_telegram.send_message(
-        tg_brief,
-        bot_token=notify_telegram.TELEGRAM_EDU_BOT_TOKEN,
-        chat_id=notify_telegram.TELEGRAM_EDU_CHAT_ID,
-    )
+    if job_search_total:
+        if job_search_webhook:
+            _push_internship_style_batch(
+                job_search_webhook, job_search_items_by_source, job_search_total,
+                embed_title="🧑‍💼 台灣求職快報", footer="台灣求職監控",
+                tg_header="🧑‍💼 *台灣求職快報已更新*", tg_channel_hint="#台灣求職",
+            )
+        else:
+            logger.error("缺少環境變數 %s，求職頻道 %d 筆新項目未推播", JOB_SEARCH_WEBHOOK_ENV, job_search_total)
 
 
 # 晚間彙整頻道(甲類:AI敘事交叉比對,見設計討論)。頻道間共用同一套執行邏輯

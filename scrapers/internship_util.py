@@ -180,6 +180,36 @@ def is_relevant(text: str, min_score: int | None = None, salary: float | None = 
     return True
 
 
+def is_relevant_job_search(text: str) -> bool:
+    """台灣求職頻道(2026-07-31新增)：跟實習頻道共用同一批來源
+    (INTERNSHIP_REGISTRY)+同一份profile/科系/行業排除規則，但反過來——
+    只要命中任何實習相關關鍵字/regex(get_matched_keywords非空，含
+    「實習」/「實習生」等weights詞、\\bintern\\b等regex)就整筆排除，
+    避免同一則職缺同時出現在實習頻道跟這個頻道。不看score是否達
+    threshold、不看_is_semantic_noise——這裡的判斷是「有沒有沾到實習
+    相關字眼」，不是「這是不是一個夠格的實習職缺」，跟is_relevant()
+    的目的不同。也不設任何正向關鍵字門檻，因為這個頻道要含兼職/正職
+    等所有非實習類型的職缺。
+
+    使用者確認(2026-07-31)：104/518/yes123/gift這4個來源的原始資料本來
+    就是用「實習」關鍵字去對方網站搜出來的結果(見各自SEARCH_KEYWORD)，
+    RICH是政府見習/工讀專屬平台，這個函式套用後幾乎全數會被排除——
+    這個頻道實質上會以MOL(全國職缺無關鍵字限制的廣泛快照)為主要供稿
+    來源，其餘5個來源偶爾漏網的非實習職缺也照樣歡迎，不特別處理，
+    不算功能缺陷。"""
+    if not text:
+        return False
+    if get_matched_keywords(text):
+        return False
+    if _is_excluded_industry(text):
+        return False
+    if _is_excluded_by_profile(text):
+        return False
+    if is_excluded_by_major(text):
+        return False
+    return True
+
+
 def passes_profile_filters(text: str) -> bool:
     """給像RICH這種本身就是政府見習/工讀專屬平台的來源用(2026-07-31新增)
     ——平台定位本身已經保證是見習/工讀性質的機會，用「實習」關鍵字計分

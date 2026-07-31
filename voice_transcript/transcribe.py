@@ -18,7 +18,12 @@ from pathlib import Path
 from faster_whisper import WhisperModel
 from opencc import OpenCC
 
-MODEL_SIZE = "large-v3"
+# 直接指向本機手動下載的模型檔(見models/faster-whisper-large-v3/)，不透過
+# faster-whisper預設的huggingface_hub自動下載——這個環境連不到huggingface.co
+# (2026-07-31確認，防火牆/防毒層級擋掉，非程式問題)，改由使用者手動下載
+# 5個檔案(config.json/model.bin/preprocessor_config.json/tokenizer.json/
+# vocabulary.json)放進這個資料夾。
+MODEL_PATH = str(Path(__file__).parent / "models" / "faster-whisper-large-v3")
 COMPUTE_TYPE = "int8_float16"
 
 _cc = OpenCC("s2twp")
@@ -28,7 +33,7 @@ _model: WhisperModel | None = None
 def _get_model() -> WhisperModel:
     global _model
     if _model is None:
-        _model = WhisperModel(MODEL_SIZE, device="cuda", compute_type=COMPUTE_TYPE)
+        _model = WhisperModel(MODEL_PATH, device="cuda", compute_type=COMPUTE_TYPE)
     return _model
 
 

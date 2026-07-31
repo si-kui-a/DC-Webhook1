@@ -30,59 +30,58 @@ function New-IntelPusherFlagTask {
     }
 }
 
-# 晚間彙整頻道(20:00,tw_stock_meta/crypto_meta的前置依賴)。2026-07-30
-# 發現這6個從專案初期就存在的頻道從來沒有被排程過(crontab.example移除
-# 時漏補到Task Scheduler)，導致tw_stock_meta/crypto_meta讀到的一直是
-# 舊資料——見Meta_Dev_Knowledge.md相關記錄。
-New-IntelPusherTask -Name 'IntelPusher-TsmcDigest' -Source 'tsmc_digest' `
-    -Trigger (New-ScheduledTaskTrigger -Daily -At 8:00PM)
-New-IntelPusherTask -Name 'IntelPusher-CbcDigest' -Source 'cbc_digest' `
-    -Trigger (New-ScheduledTaskTrigger -Daily -At 8:00PM)
-New-IntelPusherTask -Name 'IntelPusher-UsStockDigest' -Source 'us_stock_digest' `
-    -Trigger (New-ScheduledTaskTrigger -Daily -At 8:00PM)
-New-IntelPusherTask -Name 'IntelPusher-CryptoDigest' -Source 'crypto_digest' `
-    -Trigger (New-ScheduledTaskTrigger -Daily -At 8:00PM)
-New-IntelPusherTask -Name 'IntelPusher-MacroTechDigest' -Source 'macro_tech_digest' `
-    -Trigger (New-ScheduledTaskTrigger -Daily -At 8:00PM)
-New-IntelPusherTask -Name 'IntelPusher-GeopoliticsDigest' -Source 'geopolitics_digest' `
-    -Trigger (New-ScheduledTaskTrigger -Daily -At 8:00PM)
-New-IntelPusherFlagTask -Name 'IntelPusher-Scholarship' -Flag 'scholarship' `
-    -Trigger (New-ScheduledTaskTrigger -Daily -At 8:00PM)
-New-IntelPusherTask -Name 'IntelPusher-SemiSupplyChainDigest' -Source 'semi_supply_chain_digest' `
-    -Trigger (New-ScheduledTaskTrigger -Daily -At 8:00PM)
-
-# 官方每日開放資料來源(同樣是crontab.example移除時漏補的既有功能，
-# 9:00比照原本crontab.example的時間)。
-New-IntelPusherTask -Name 'IntelPusher-MacroFred' -Source 'macro_fred' `
-    -Trigger (New-ScheduledTaskTrigger -Weekly -DaysOfWeek Monday,Tuesday,Wednesday,Thursday,Friday -At 9:00AM)
-New-IntelPusherTask -Name 'IntelPusher-TwseTsmc' -Source 'twse_tsmc' `
-    -Trigger (New-ScheduledTaskTrigger -Daily -At 9:00AM)
-New-IntelPusherTask -Name 'IntelPusher-TwseChunghwa' -Source 'twse_chunghwa' `
-    -Trigger (New-ScheduledTaskTrigger -Daily -At 9:00AM)
-
-# etf0050(股價追蹤+三大法人買賣超T86"日報"+均線支撐,2026-07-30發現的
-# 排程缺口)：程式碼註解明確寫是每個交易日性質的資料，原本只靠
-# IntelPusher-Weekly(每週一一次)順便覆蓋，法人動向等於一週才更新一次，
-# 跟資料本身的日頻更新不符。比照macro_fred同為平日9:00(非交易日執行
-# 只會抓到空資料，靜默省略，不影響其餘功能，見etf0050.py既有容錯設計)。
-New-IntelPusherTask -Name 'IntelPusher-Etf0050' -Source 'etf0050' `
-    -Trigger (New-ScheduledTaskTrigger -Weekly -DaysOfWeek Monday,Tuesday,Wednesday,Thursday,Friday -At 9:00AM)
-
-# 大總結頻道(20:30,晚間彙整之後)
-New-IntelPusherTask -Name 'IntelPusher-TwStockMeta' -Source 'tw_stock_meta' `
-    -Trigger (New-ScheduledTaskTrigger -Daily -At 8:30PM)
-New-IntelPusherTask -Name 'IntelPusher-CryptoMeta' -Source 'crypto_meta' `
-    -Trigger (New-ScheduledTaskTrigger -Daily -At 8:30PM)
+# 排程精簡(2026-07-31)：晚間彙整7頻道+scholarship(原8個獨立任務)、
+# 09:00官方資料源5個來源(原5個獨立任務)、20:30大總結2頻道(原2個獨立
+# 任務)——全部改成main.py的--digest-all/--daily-official/--meta-all
+# 批次flag，內部迴圈跑完同一時間點全部來源，Task Scheduler只留3個任務。
+# 故意不在這裡逐一列舊的獨立任務定義，避免這支腳本之後重跑時把已經
+# 精簡掉的舊任務重新建回來(同一個坑2026-07-31已在幣圈事件觸發那段
+# 踩過一次，見下方模擬持倉幣圈的說明)。若需要重新套用，改跑
+# scripts/consolidate_daily_tasks.ps1，不要在這個檔案裡加回逐一任務。
+$actions2000 = @(
+    New-ScheduledTaskAction -Execute $Python -Argument "`"$MainPy`" --digest-all"
+    New-ScheduledTaskAction -Execute $Python -Argument "`"$MainPy`" --scholarship"
+)
+try {
+    Register-ScheduledTask -TaskName 'IntelPusher-Evening2000' -Action $actions2000 `
+        -Trigger (New-ScheduledTaskTrigger -Daily -At 8:00PM) -Force -ErrorAction Stop | Out-Null
+    Write-Output '已建立: IntelPusher-Evening2000'
+} catch {
+    Write-Output "失敗: IntelPusher-Evening2000 -- $($_.Exception.Message)"
+}
+try {
+    Register-ScheduledTask -TaskName 'IntelPusher-Morning0900' `
+        -Action (New-ScheduledTaskAction -Execute $Python -Argument "`"$MainPy`" --daily-official") `
+        -Trigger (New-ScheduledTaskTrigger -Daily -At 9:00AM) -Force -ErrorAction Stop | Out-Null
+    Write-Output '已建立: IntelPusher-Morning0900'
+} catch {
+    Write-Output "失敗: IntelPusher-Morning0900 -- $($_.Exception.Message)"
+}
+try {
+    Register-ScheduledTask -TaskName 'IntelPusher-Evening2030' `
+        -Action (New-ScheduledTaskAction -Execute $Python -Argument "`"$MainPy`" --meta-all") `
+        -Trigger (New-ScheduledTaskTrigger -Daily -At 8:30PM) -Force -ErrorAction Stop | Out-Null
+    Write-Output '已建立: IntelPusher-Evening2030'
+} catch {
+    Write-Output "失敗: IntelPusher-Evening2030 -- $($_.Exception.Message)"
+}
 
 # 模擬持倉-台股(台股收盤後,工作日14:00)
 New-IntelPusherTask -Name 'IntelPusher-TwStockPortfolio' -Source 'tw_stock_portfolio' `
     -Trigger (New-ScheduledTaskTrigger -Weekly -DaysOfWeek Monday,Tuesday,Wednesday,Thursday,Friday -At 2:00PM)
 
-# 模擬持倉-幣圈(每小時)
-New-IntelPusherTask -Name 'IntelPusher-CryptoFuturesPortfolio' -Source 'crypto_futures_portfolio' `
-    -Trigger (New-ScheduledTaskTrigger -Once -At (Get-Date) -RepetitionInterval (New-TimeSpan -Hours 1) -RepetitionDuration (New-TimeSpan -Days 3650))
-New-IntelPusherTask -Name 'IntelPusher-CryptoDiscretionaryPortfolio' -Source 'crypto_discretionary_portfolio' `
-    -Trigger (New-ScheduledTaskTrigger -Once -At (Get-Date) -RepetitionInterval (New-TimeSpan -Hours 1) -RepetitionDuration (New-TimeSpan -Days 3650))
+# 模擬持倉-幣圈：原本這裡是IntelPusher-CryptoFuturesPortfolio/
+# IntelPusher-CryptoDiscretionaryPortfolio兩個每小時排程(各24次/天，
+# 加起來48次/天)，2026-07-31發現GEMINI_API_KEY整包專案共用免費層額度
+# 只有20次/天(429實測確認，見docs/gemini_quota_allocation.md)，這兩個
+# 帳戶單獨就超過兩倍。已改用scripts/apply_event_triggered_crypto.ps1
+# 註冊IntelPusher-CheckTriggers(每20分鐘跑純規則檢查，只有真的觸發
+# 條件才呼叫AI)取代——故意不在這裡保留這兩個舊排程的定義，避免這支
+# 腳本之後重跑時又把已經移除的每小時排程重新建回來(實測踩過這個坑：
+# 重跑這支腳本後IntelPusher-CheckTriggers還在，但兩個舊的每小時排程
+# 也被重新建立，變成三個排程同時對同一組帳戶動作)。若需要重新套用
+# 事件觸發機制，改跑scripts/apply_event_triggered_crypto.ps1，不要
+# 在這個檔案裡加回這兩行。
 
 # 台灣實習頻道(每天09:00,daily不限工作日——職缺任何一天都可能新增)。
 # 資料源(MOL台灣就業通開放資料)實測updateTime固定是每天01:00更新一次

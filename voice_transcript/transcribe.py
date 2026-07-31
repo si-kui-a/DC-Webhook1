@@ -12,8 +12,25 @@ s2twp(簡體->繁體，含台灣慣用詞彙轉換，不只是簡繁字形轉換
 用法：
     .venv/Scripts/python.exe transcribe.py recordings/xxx.wav
 """
+import os
 import sys
 from pathlib import Path
+
+# ctranslate2的GPU推論需要cuBLAS/cuDNN的DLL，這台機器沒裝系統級CUDA
+# Toolkit(只有顯卡驅動)，改用pip版nvidia-cublas-cu12/nvidia-cudnn-cu12
+# 套件裡bundle的DLL。實測(2026-07-31)：只用os.add_dll_directory()不夠，
+# ctranslate2內部載入cublas64_12.dll時沒有吃到這個註冊(直接ctypes.CDLL
+# 絕對路徑可以載入，證明DLL本身沒問題，純粹是ctranslate2的載入方式沒有
+# 走add_dll_directory這條路)，改成同時把DLL目錄塞進PATH環境變數(舊式
+# DLL搜尋順序仍然吃這個)才真的有效。兩者都要設，且必須在import
+# faster_whisper之前執行。
+if sys.platform == "win32":
+    _nvidia_dir = Path(__file__).parent / ".venv" / "Lib" / "site-packages" / "nvidia"
+    for _sub in ("cublas/bin", "cudnn/bin"):
+        _dll_dir = _nvidia_dir / _sub
+        if _dll_dir.is_dir():
+            os.add_dll_directory(str(_dll_dir))
+            os.environ["PATH"] = str(_dll_dir) + os.pathsep + os.environ["PATH"]
 
 from faster_whisper import WhisperModel
 from opencc import OpenCC

@@ -18,7 +18,12 @@ CHANNELS = 1
 RECORDINGS_DIR = Path(__file__).parent / "recordings"
 
 
-def record_to_wav() -> Path:
+def record_to_wav(duration_seconds: float | None = None) -> Path:
+    """duration_seconds為None(預設)時是正常使用情境：前台錄音、Ctrl+C停止。
+    傳入秒數時改成錄固定時長就自動停止，只用於自動化測試(不需要人在場按
+    Ctrl+C)，不是正式流程的一部分。"""
+    import time
+
     RECORDINGS_DIR.mkdir(exist_ok=True)
     out_path = RECORDINGS_DIR / f"{datetime.now():%Y%m%d_%H%M%S}.wav"
 
@@ -29,7 +34,11 @@ def record_to_wav() -> Path:
             print(f"[錄音警告] {status}", file=sys.stderr)
         q.put(indata.copy())
 
-    print("開始錄音，按 Ctrl+C 停止...")
+    if duration_seconds is None:
+        print("開始錄音，按 Ctrl+C 停止...")
+    else:
+        print(f"開始錄音，{duration_seconds}秒後自動停止(測試模式)...")
+
     with wave.open(str(out_path), "wb") as wf:
         wf.setnchannels(CHANNELS)
         wf.setsampwidth(2)  # int16
@@ -40,10 +49,13 @@ def record_to_wav() -> Path:
             dtype="int16",
             callback=callback,
         ):
+            start = time.monotonic()
             try:
-                while True:
-                    wf.writeframes(q.get().tobytes())
+                while duration_seconds is None or time.monotonic() - start < duration_seconds:
+                    wf.writeframes(q.get(timeout=1).tobytes())
             except KeyboardInterrupt:
+                pass
+            except queue.Empty:
                 pass
 
     print(f"錄音結束，已存檔：{out_path}")

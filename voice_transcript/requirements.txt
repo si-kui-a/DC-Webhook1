@@ -7,6 +7,10 @@ numpy>=2.0
 
 # 語音辨識(GPU, CTranslate2後端)
 faster-whisper>=1.2
+# ctranslate2的GPU推論需要的cuBLAS/cuDNN，這台機器沒裝系統級CUDA Toolkit，
+# 用pip版DLL取代(見transcribe.py開頭的PATH/add_dll_directory設定)
+nvidia-cublas-cu12
+nvidia-cudnn-cu12
 
 # 簡體轉繁體(Whisper中文輸出預設偏簡體，需轉換為台灣用語繁體)
 opencc-python-reimplemented>=0.1.7

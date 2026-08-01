@@ -10,6 +10,8 @@ voice_transcript/models/
 # PII 明碼版本禁止進版控，只有 .enc 加密版本可以進
 academic_progress.md
 my_resume.json
+resume_draft.txt
+past_experience.md
 
 logs/*.log
 work/*.log

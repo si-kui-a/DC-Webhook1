@@ -15,9 +15,10 @@ from cryptography.fernet import Fernet
 KEY_PATH = Path.home() / ".intel-pusher-backup.key"
 
 # 含個資、需加密後才可備份的檔案清單。
-# intel-pusher 目前沒有這類檔案（沒有 academic_progress.md / my_resume.json
-# 之類的個人資料），清單刻意留空；若之後這個專案真的產生個資檔案再加進來。
-PII_FILES: list[str] = []
+# 2026-08-01新增：resume_draft.txt(履歷初版純文字稿)、past_experience.md
+# (過往經歷累積紀錄)——career repo整合功能的暫存資料，透過resume_bot.py
+# 的Discord文字指令維護，見memory: project_career_repo_scraper_integration_plan。
+PII_FILES: list[str] = ["resume_draft.txt", "past_experience.md"]
 
 
 def get_or_create_key() -> bytes:

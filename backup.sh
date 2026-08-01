@@ -48,17 +48,20 @@ fi
 
 # 2. 只加入不含明碼個資的檔案；.env、data.db、原始 .md/.json 明碼版本
 #    透過 .gitignore 排除，此處不重複列出以免兩處清單不同步。
-#    intel-pusher 目前沒有 PII_FILES（見 encrypt_backup.py），所以沒有
-#    對應的 .enc 檔案要加；等這個專案真的產生個資檔案時再加進來。
 #    2026-07-31自我檢討發現這份清單長期落後於實際專案結構(ai_insight.py/
 #    digest_format.py/notify_telegram.py/price_feed.py/config//scripts//
 #    docs//CLAUDE.md都是既有git追蹤檔案但從未列在這裡)——這些檔案的異動
 #    只能靠手動commit才會進版控，夜間自動備份完全沒覆蓋到，一併補上。
+#    2026-08-01：PII_FILES(見encrypt_backup.py)開始有內容(resume_draft.txt/
+#    past_experience.md，career repo整合功能的暫存資料)，對應的.enc輸出
+#    檔案要一併加進來，不然步驟1加密完全白做——加密檔本身不含個資明碼，
+#    可以安全進版控。
 git add scrapers/ main.py db.py push_webhook.py encrypt_backup.py schema.sql \
         summarizer_zh.py summarizer_en.py ai_insight.py digest_format.py \
         notify_telegram.py price_feed.py config/ scripts/ docs/ \
         README.md requirements.txt backup.sh CLAUDE.md \
-        .gitignore .env.example Meta_Dev_Knowledge.md Meta_User_Feedback.md 2>/dev/null || true
+        .gitignore .env.example Meta_Dev_Knowledge.md Meta_User_Feedback.md \
+        resume_draft.txt.enc past_experience.md.enc 2>/dev/null || true
 
 # 3. 若沒有變更，git commit 會因為「nothing to commit」而失敗（不是產生空
 #    commit），用 || true 避免中斷腳本；--allow-empty-message 只是允許空白

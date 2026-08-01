@@ -58,6 +58,9 @@ from scrapers import internship_rich
 from scrapers import internship_yes123
 from scrapers import internship_gift
 from scrapers import internship_util
+from scrapers import youtube_digest
+from scrapers import house_591
+import discord_bot_push
 
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
 WORK_DIR = os.path.join(PROJECT_ROOT, "work")
@@ -95,6 +98,10 @@ SOURCE_REGISTRY = {
                   twse_financials.SOURCE_NAME_TSMC, twse_financials.SOURCE_ID_TSMC),
     "twse_chunghwa": (twse_financials.fetch_chunghwa, "WEBHOOK_CHUNGHWA",
                       twse_financials.SOURCE_NAME_CHUNGHWA, twse_financials.SOURCE_ID_CHUNGHWA),
+    # 找房頻道(591,2026-08-01新建)：西屯/龍井/西區,純規則式篩選,見
+    # scrapers/house_591.py。跟其餘SOURCE_REGISTRY來源一樣走run_source()
+    # 逐篇推播(不是internship那種批次分桶)，因為只有單一來源。
+    "house_591": (house_591.fetch, "WEBHOOK_HOUSE_591", house_591.SOURCE_NAME, house_591.SOURCE_ID),
 }
 
 # 獎學金來源（批次模式，共用一個 webhook URL，推播合併為一條訊息）
@@ -375,6 +382,14 @@ INTERNSHIP_FIRST_RUN_CAP = 20
 # 職缺無關鍵字限制的廣泛快照)為主要供稿來源，使用者已確認接受此取捨。
 JOB_SEARCH_WEBHOOK_ENV = "WEBHOOK_JOB_SEARCH"
 JOB_SEARCH_FIRST_RUN_CAP = 20
+
+# YouTube頻道字幕摘要(2026-08-01新增，使用者確認)：每週執行一次(不是
+# 每天)——實測發現這個頻道的字幕會延遲數天才補上，若當週還沒有字幕，
+# 這支影片就先跳過、不寫進db，下週會自動再檢查一次(靠dedup機制天然
+# 支援「還沒處理過」的重試語意，不需要額外狀態欄位)。零AI零GPU，用Bot
+# API建討論串(不是webhook)，每個追蹤頻道對應config裡各自的
+# discord_channel_id，見scrapers/youtube_digest.py。
+YOUTUBE_CHANNELS_CONFIG_PATH = os.path.join(PROJECT_ROOT, "config", "youtube_channels.json")
 
 
 def _build_scholarship_batch(items_by_source: dict[str, list[dict]]) -> list[str]:
@@ -670,6 +685,79 @@ def _push_internship_style_batch(
         bot_token=notify_telegram.TELEGRAM_EDU_BOT_TOKEN,
         chat_id=notify_telegram.TELEGRAM_EDU_CHAT_ID,
     )
+
+
+def run_youtube_digest():
+    """YouTube頻道字幕摘要，每週執行一次。一個追蹤頻道對應一個獨立
+    Discord頻道(config/youtube_channels.json的discord_channel_id)；
+    每支「這週檢查時已經有字幕」的影片各自建一個討論串貼完整逐字稿；
+    這週處理完後在該Discord頻道(不是討論串)發一則彙整當週所有新逐字稿
+    摘要的訊息。還沒有字幕的影片不寫進db、不標記，下週會自動重新檢查
+    (dedup機制天然支援這種「還沒處理過」的重試語意)。零AI零GPU，字幕
+    抓取失敗(頻道沒開字幕)一律跳過，不會退回Whisper。"""
+    with open(YOUTUBE_CHANNELS_CONFIG_PATH, encoding="utf-8") as f:
+        channels = json.load(f)["channels"]
+
+    for ch in channels:
+        source_id = ch["source_id"]
+        discord_channel_id = ch["discord_channel_id"]
+        db.upsert_source(source_id, ch["name"], "youtube_digest", "")
+        try:
+            entries = youtube_digest.fetch_feed_entries(ch["channel_id"])
+        except Exception as e:
+            fail_count = db.record_fetch_failure(source_id)
+            logger.error("[youtube_digest:%s] RSS抓取失敗（累計 %d 次）：%s", ch["name"], fail_count, e)
+            continue
+        db.record_fetch_success(source_id)
+
+        new_this_week = []
+        for entry in entries:
+            # 先查有沒有處理過，處理過就跳過——不重複花成本抓字幕。
+            if db.item_exists(source_id, entry["title"], entry["url"]):
+                continue
+
+            transcript_text = youtube_digest.fetch_transcript_text(entry["video_id"])
+            if transcript_text is None:
+                # 這週還沒有字幕，不寫進db，下週會再檢查一次這支影片。
+                continue
+
+            thread_id = discord_bot_push.create_thread(discord_channel_id, entry["title"][:100])
+            if thread_id:
+                discord_bot_push.post_message(thread_id, transcript_text)
+            else:
+                logger.error("[youtube_digest:%s] 建討論串失敗，%s 這支影片的完整逐字稿沒推播成功",
+                             ch["name"], entry["video_id"])
+
+            summary = youtube_digest.summarize_transcript(transcript_text)
+            item = db.insert_item_if_new(
+                source_id=source_id,
+                title=entry["title"],
+                summary=summary,
+                url=entry["url"],
+                published_at=entry["published_at"],
+            )
+            if item:
+                new_this_week.append(item)
+
+        if not new_this_week:
+            logger.info("[youtube_digest:%s] 本週無新字幕", ch["name"])
+            continue
+
+        date_str = datetime.now().strftime("%Y-%m-%d")
+        lines = [f"📺 【{ch['name']}】本週字幕摘要彙整 | {date_str}（{len(new_this_week)} 部影片）"]
+        for item in new_this_week:
+            lines.append("━━━━━━━━━━━━━")
+            lines.append(f"[{item['title'][:100]}]({item['url']})")
+            if item["summary"]:
+                lines.append(item["summary"])
+
+        ok = discord_bot_push.post_message(discord_channel_id, "\n".join(lines))
+        if ok:
+            logger.info("[youtube_digest:%s] 週彙整推播成功，%d 部影片", ch["name"], len(new_this_week))
+            for item in new_this_week:
+                db.mark_published(item["item_id"])
+        else:
+            logger.error("[youtube_digest:%s] 週彙整推播失敗", ch["name"])
 
 
 def run_internship():
@@ -1559,6 +1647,8 @@ def main():
                         help="批次執行所有獎學金來源")
     parser.add_argument("--internship", action="store_true",
                         help="批次執行所有台灣實習來源")
+    parser.add_argument("--youtube-digest", action="store_true",
+                        help="每週執行YouTube頻道字幕摘要")
     # 2026-07-31新增(排程精簡)：這三個時間點原本各自拆成多個獨立Windows
     # Scheduled Task(7個20:00+4個09:00+2個20:30=13個)，但同一時間點的
     # 來源沒有理由分開排程，改成各一個flag內部迴圈跑完，Task Scheduler
@@ -1571,12 +1661,12 @@ def main():
                         help="批次執行所有平日官方資料來源(fed/etf0050/macro_fred/twse_tsmc/twse_chunghwa,09:00)")
     args = parser.parse_args()
 
-    flags = (args.source, args.scholarship, args.internship, args.digest_all, args.meta_all, args.daily_official)
+    flags = (args.source, args.scholarship, args.internship, args.youtube_digest, args.digest_all, args.meta_all, args.daily_official)
     if not any(flags):
         parser.print_help()
         sys.exit(1)
     if sum(bool(x) for x in flags) > 1:
-        parser.error("--source / --scholarship / --internship / --digest-all / --meta-all / --daily-official 六者互斥，一次只能選一個")
+        parser.error("--source / --scholarship / --internship / --youtube-digest / --digest-all / --meta-all / --daily-official 七者互斥，一次只能選一個")
 
     db.init_db()
 
@@ -1584,6 +1674,8 @@ def main():
         run_scholarship()
     elif args.internship:
         run_internship()
+    elif args.youtube_digest:
+        run_youtube_digest()
     elif args.digest_all:
         # 批次迴圈本身也接一層例外(即使run_digest_channel理論上該自己接
         # 完)，避免任何未預期例外讓後面的頻道整批不執行——這條保證在改成

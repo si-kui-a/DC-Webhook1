@@ -1,0 +1,12 @@
+{
+  "_comment": "YouTube頻道字幕摘要頻道追蹤清單(2026-08-01新增)。只列會被run_youtube_digest()處理的頻道——只抓有開字幕功能的頻道，沒有字幕的頻道(如brainbrocrypto，實測確認Subtitles are disabled)不放進這裡，使用者自行用voice_transcript功能手動處理，不進這套自動化排程。",
+  "_comment_structure": "一個YT頻道對應一個獨立Discord頻道(discord_channel_id)——不共用單一頻道。每支影片的完整逐字稿各自開一個討論串(main.py::run_youtube_digest()執行時建立)，當週處理完後在這個Discord頻道(不是討論串)發一則彙整當週所有新逐字稿摘要的訊息。",
+  "channels": [
+    {
+      "channel_id": "UC0lbAQVpenvfA2QqzsRtL_g",
+      "name": "@yutinghaofinance",
+      "source_id": "youtube.yutinghaofinance",
+      "discord_channel_id": "1532839751051378992"
+    }
+  ]
+}

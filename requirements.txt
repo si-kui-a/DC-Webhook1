@@ -27,3 +27,8 @@ python-docx>=1.2
 # resume_bot.py（履歷配對Discord常駐bot）：唯一需要WebSocket常駐連線的
 # 功能，跟其餘scrapers/main.py的排程批次架構不同，見resume_bot.py docstring。
 discord.py>=2.7
+
+# youtube_digest.py（YouTube頻道字幕摘要頻道）：只抓已有字幕的影片，
+# 零AI零GPU，不下載影片/音訊。2026-08-01實測比yt-dlp+deno輕量穩定，
+# 見scrapers/youtube_digest.py docstring。
+youtube-transcript-api>=1.0

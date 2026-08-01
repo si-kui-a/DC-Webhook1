@@ -55,6 +55,17 @@ def make_dedup_key(source_id: str, title: str, url: str) -> str:
     return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
 
 
+def item_exists(source_id: str, title: str, url: str) -> bool:
+    """唯讀檢查，不寫入——給youtube_digest.py這種「先查有沒有處理過，
+    再決定要不要花成本(抓字幕)去處理」的情境用，插入與否交由呼叫端決定，
+    不能直接用insert_item_if_new(那支一定會在不存在時寫入)。"""
+    dedup_key = make_dedup_key(source_id, title, url)
+    conn = get_conn()
+    existing = conn.execute("SELECT 1 FROM item WHERE dedup_key = ?", (dedup_key,)).fetchone()
+    conn.close()
+    return existing is not None
+
+
 def insert_item_if_new(source_id: str, title: str, summary: str, url: str, published_at: str | None) -> dict | None:
     """
     寫入新項目；若 dedup_key 已存在則回傳 None（代表已抓過，不需推播）。

@@ -94,6 +94,29 @@ def post_message(thread_id: str, text: str):
         _fail_if_error(resp)
 
 
+def post_file(thread_id: str, file_path: str, message: str = ""):
+    """上傳檔案(PDF等)——跟_request()不同，Discord檔案上傳要用multipart
+    表單，不是JSON body，這裡不重用_request()(它固定送json_body)，另外
+    用requests直接處理multipart(video_digest.py用，2026-08-05新增)。"""
+    url = f"{API_BASE}/channels/{thread_id}/messages"
+    with open(file_path, "rb") as f:
+        for attempt in range(MAX_RETRIES):
+            resp = requests.post(
+                url,
+                headers={"Authorization": f"Bot {BOT_TOKEN}"},  # multipart不能手動設Content-Type，requests自己算boundary
+                data={"content": message} if message else None,
+                files={"file": (os.path.basename(file_path), f, "application/octet-stream")},
+                timeout=60,
+            )
+            if resp.status_code == 429:
+                retry_after = resp.json().get("retry_after", 2 ** attempt)
+                time.sleep(retry_after)
+                f.seek(0)
+                continue
+            _fail_if_error(resp)
+            return
+
+
 def push_transcript(raw_text: str, corrected_text: str, summary: str | None) -> str:
     """建討論串 -> 推原稿 -> 推修正稿+摘要。回傳討論串ID。"""
     thread_name = f"逐字稿 {datetime.now():%Y-%m-%d %H:%M}"

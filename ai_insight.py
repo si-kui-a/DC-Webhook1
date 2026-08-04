@@ -574,3 +574,60 @@ def build_trade_decision(angle: str, portfolio: dict, positions: list[dict],
     except Exception as e:
         logger.warning(f"gemini模擬持倉決策失敗: {e}")
         return None
+
+
+def assess_stop_loss(position: dict, portfolio: dict, trigger_reason: str) -> dict | None:
+    """窄範圍AI呼叫(2026-08-04新增，rule_engine.py的安全閥用)——只問「這一筆
+    虧損部位要不要切損」，不是完整的open/close/hold交易決策。其他標的/新進場
+    仍然100%由rule_engine的規則控制，這支函式只負責回答單一個yes/no問題。
+
+    刻意把prompt壓到最小(只給這一筆部位的數字，不塞其他持倉/歷史交易/市場
+    報告)——一來這是「窄範圍」設計的具體體現，二來prompt越小，成本越低、
+    越不容易因為無關資訊干擾判斷。
+
+    回傳{"cut": bool, "reasoning": str}或None(呼叫失敗/回應格式不對，呼叫端
+    視為「這次沒問到，維持持有，下次再評估」，不能當成「AI說不要切」)。
+    """
+    api_key = os.getenv("GEMINI_API_KEY", "")
+    if not api_key:
+        return None
+
+    prompt = (
+        "你在協助管理一個小額紙上模擬帳戶(全部是模擬,不是真實交易)。"
+        f"這筆部位目前虧損已經達到觸發安全閥的門檻({trigger_reason})，"
+        "規則引擎本身沒有停損機制，這次臨時徵詢你的判斷：這筆部位現在要不要"
+        "認賠出場(切損)，還是繼續持有觀察？請只針對這一筆部位判斷，不用考慮"
+        "帳戶裡其他持倉。\n\n"
+        f"標的:{position['symbol']} 方向:{position['side']}\n"
+        f"均價:{position['avg_cost']:g} 現價:{position.get('current_price'):g}\n"
+        f"未實現損益:{position.get('unrealized_pnl'):+.2f} {portfolio.get('currency', '')}\n"
+        f"槓桿:{position.get('leverage', 1):g}x\n\n"
+        '只回傳JSON，格式:{"cut": true|false, "reasoning": "一句話說明理由"}'
+    )
+
+    url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent"
+    body = json.dumps({
+        "contents": [{"role": "user", "parts": [{"text": prompt}]}],
+        "generationConfig": {"temperature": 0.3, "responseMimeType": "application/json"},
+    }).encode("utf-8")
+    req = urllib.request.Request(
+        url, data=body,
+        headers={"Content-Type": "application/json", "x-goog-api-key": api_key},
+        method="POST",
+    )
+
+    def _do():
+        with urllib.request.urlopen(req, timeout=TIMEOUT_SECONDS) as resp:
+            return json.loads(resp.read().decode("utf-8"))
+
+    try:
+        data = _with_retry(_do)
+        text = data["candidates"][0]["content"]["parts"][0]["text"]
+        parsed = json.loads(text)
+        cut = parsed.get("cut")
+        if not isinstance(cut, bool):
+            return None
+        return {"cut": cut, "reasoning": str(parsed.get("reasoning", "")).strip()}
+    except Exception as e:
+        logger.warning(f"gemini停損評估失敗: {e}")
+        return None

@@ -41,6 +41,7 @@ from dotenv import load_dotenv
 import ai_insight
 import db
 import price_feed
+import rule_engine
 import summarizer_en
 import summarizer_zh
 import notify_telegram
@@ -1397,6 +1398,13 @@ def run_daily_recap():
 # 進出場，全部是模擬交易，不動用真實資金。3個帳戶各自獨立頻道(使用者
 # 確認2026-07-30)，不共用webhook——避免3個帳戶的動作/持倉訊息混在同一個
 # 頻道裡難以分辨。
+# 模擬持倉決策引擎切換點(2026-08-04新增，使用者確認三帳戶改規則式進出場)。
+# "rules" = rule_engine.build_trade_decision()(SMA5/20交叉，零AI)；
+# "ai" = ai_insight.build_trade_decision()(原本的Gemini自由判斷)。
+# 兩邊介面完全相容(同樣的輸入/輸出格式)，改這個常數就能整批切換，AI路徑
+# 刻意保留沒刪，之後想比較兩者表現或臨時切回去都不用改程式碼。
+DECISION_ENGINE = "rules"
+
 PORTFOLIO_CHANNELS = {
     "tw_stock_portfolio": {
         "portfolio_id": "tw_stock",
@@ -1480,9 +1488,10 @@ def run_portfolio_channel(key: str):
             priced.update({k: v for k, v in tech.items() if k != "latest"})
         positions.append(priced)
 
-    decision = ai_insight.build_trade_decision(config["angle"], portfolio, positions, recent_trades, recent_reports, win_stats)
+    engine = rule_engine if DECISION_ENGINE == "rules" else ai_insight
+    decision = engine.build_trade_decision(config["angle"], portfolio, positions, recent_trades, recent_reports, win_stats)
     if not decision:
-        logger.error("[%s] Gemini決策失敗（額度用盡/網路錯誤/回應格式不對），本次跳過", key)
+        logger.error("[%s] %s決策失敗（額度用盡/網路錯誤/回應格式不對），本次跳過", key, DECISION_ENGINE)
         return
 
     trade_date = datetime.now().strftime("%Y-%m-%d")

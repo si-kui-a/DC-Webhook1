@@ -45,7 +45,7 @@
   </Triggers>
   <Actions Context="Author">
     <Exec>
-      <Command>C:\Projects\intel-pusher\venv\Scripts\python.exe</Command>
+      <Command>C:\Projects\intel-pusher\venv\Scripts\pythonw.exe</Command>
       <Arguments>C:\Projects\intel-pusher\main.py --scholarship</Arguments>
     </Exec>
   </Actions>

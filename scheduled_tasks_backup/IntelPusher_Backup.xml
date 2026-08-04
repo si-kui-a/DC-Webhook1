@@ -1,52 +1,83 @@
-<?xml version="1.0" encoding="UTF-16"?>
+﻿<?xml version="1.0" encoding="UTF-16"?>
+
 <Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
+
   <RegistrationInfo>
+
     <Date>2026-07-27T23:00:00</Date>
+
     <Author>PREDATORHELIOSN\User</Author>
-    <URI>\IntelPusher_FedDaily</URI>
+
+    <URI>\IntelPusher_Backup</URI>
+
   </RegistrationInfo>
+
   <Principals>
+
     <Principal id="Author">
-      <UserId>PREDATORHELIOSN\User</UserId>
+
+      <UserId>S-1-5-21-2795903542-1715392367-3223600174-1001</UserId>
+
       <LogonType>InteractiveToken</LogonType>
-      <RunLevel>LeastPrivilege</RunLevel>
+
     </Principal>
+
   </Principals>
+
   <Settings>
-    <StartWhenAvailable>true</StartWhenAvailable>
+
     <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>
+
     <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>
+
+    <ExecutionTimeLimit>PT2H</ExecutionTimeLimit>
+
     <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>
-    <ExecutionTimeLimit>PT30M</ExecutionTimeLimit>
+
+    <StartWhenAvailable>true</StartWhenAvailable>
+
     <IdleSettings>
+
       <Duration>PT10M</Duration>
+
       <WaitTimeout>PT1H</WaitTimeout>
+
       <StopOnIdleEnd>true</StopOnIdleEnd>
+
       <RestartOnIdle>false</RestartOnIdle>
+
     </IdleSettings>
+
   </Settings>
+
   <Triggers>
+
     <CalendarTrigger>
-      <StartBoundary>2026-07-28T09:00:00</StartBoundary>
-      <ScheduleByWeek>
-        <WeeksInterval>1</WeeksInterval>
-        <DaysOfWeek>
-          <Monday/>
-          <Tuesday/>
-          <Wednesday/>
-          <Thursday/>
-          <Friday/>
-        </DaysOfWeek>
-      </ScheduleByWeek>
+
+      <StartBoundary>2026-07-28T03:00:00</StartBoundary>
+
+      <ScheduleByDay>
+
+        <DaysInterval>1</DaysInterval>
+
+      </ScheduleByDay>
+
     </CalendarTrigger>
-    <BootTrigger>
-      <Enabled>true</Enabled>
-    </BootTrigger>
+
+    <BootTrigger />
+
   </Triggers>
+
   <Actions Context="Author">
+
     <Exec>
-      <Command>C:\Projects\intel-pusher\venv\Scripts\pythonw.exe</Command>
-      <Arguments>C:\Projects\intel-pusher\main.py --source fed</Arguments>
+
+      <Command>C:\PROGRA~1\Git\bin\bash.exe</Command>
+
+      <Arguments>C:\Projects\10-501_Intel_Pusher_股票情報推播機器人\backup.sh</Arguments>
+
     </Exec>
+
   </Actions>
+
 </Task>

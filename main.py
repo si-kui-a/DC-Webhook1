@@ -62,6 +62,7 @@ from scrapers import internship_util
 from scrapers import youtube_digest
 from scrapers import house_591
 from scrapers import realestate_analysis, realestate_scraper
+from scrapers import index_scraper
 import discord_bot_push
 
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
@@ -1375,13 +1376,33 @@ def run_daily_recap():
             all_ok = False
             logger.error("[%s] 推播失敗（訊息 %d/%d）：HTTP %s %s", key, i + 1, len(embeds), status, err)
 
+    # DXY/TWII快照(2026-08-05從finfeed併入)——單獨try/except，抓失敗只是
+    # 少這兩行數字，不該讓整份已經算好的晨間快報開天窗。
+    index_line = ""
+    try:
+        snap = index_scraper.get_dxy_twii_snapshot()
+        dxy, twii = snap["dxy"], snap["twii"]
+        index_line = (
+            f"\n\n📊 美元指數 {dxy['value']:.2f}（{dxy['change_pct']:+.2f}%）｜"
+            f"台股加權 {twii['value']:,.0f}（{twii['change_pct']:+.2f}%）"
+        )
+    except Exception as e:
+        logger.warning("[%s] DXY/TWII快照抓取失敗，本次跳過這段：%s", key, e)
+
     tg_points = "\n".join(f"• 【{p['category']}】{p['point']}" for p in summary["points"])
     tg_text = (
         f"☀️ *每日晨間快報（{yesterday_str}）*\n\n"
-        f"{summary['overview']}\n\n{tg_points}\n\n"
+        f"{summary['overview']}\n\n{tg_points}{index_line}\n\n"
         f"完整內容請至 Discord #每日晨間快報 查看"
     )
     notify_telegram.send_message(tg_text)
+
+    if index_line:
+        send_webhook(webhook_url, build_embed(
+            title="美元指數／台股加權指數",
+            description=index_line.strip(),
+            url="",
+        ))
 
     if all_ok:
         logger.info(

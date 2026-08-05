@@ -29,9 +29,19 @@ $taskName = "IntelPusher-RealestateReport"
 # schtasks /query /xml確認過，不是憑印象假設）。
 $taskRun = '"' + $pythonw + '" "' + $mainPy + '" --source realestate_report'
 
-# 先移除同名舊任務（若上次失敗前有殘留），避免schtasks /create報「工作已存在」
-schtasks /query /tn $taskName > $null 2>&1
-if ($LASTEXITCODE -eq 0) {
+# 先移除同名舊任務（若上次失敗前有殘留），避免schtasks /create報「工作已存在」。
+# 2026-08-05實測撞到的坑：對schtasks.exe這類原生執行檔用2>&1會把stderr
+# 包成PowerShell錯誤物件，這支腳本開頭設了$ErrorActionPreference="Stop"，
+# 「查詢時任務還不存在」這種預期內、無害的訊息就會直接讓整支腳本中斷、
+# 連後面真正建立任務的步驟都跑不到——這裡故意局部把EAP降成
+# SilentlyContinue，查完立刻還原，不影響後面/create那步該有的錯誤中斷。
+$prevEAP = $ErrorActionPreference
+$ErrorActionPreference = "SilentlyContinue"
+schtasks /query /tn $taskName 2>&1 | Out-Null
+$taskExists = ($LASTEXITCODE -eq 0)
+$ErrorActionPreference = $prevEAP
+
+if ($taskExists) {
     schtasks /delete /tn $taskName /f | Out-Null
 }
 

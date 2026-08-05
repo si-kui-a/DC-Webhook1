@@ -20,6 +20,7 @@ source表的fail_count/last_fetched_at欄位，source_id用網址雜湊當key。
 import hashlib
 import json
 import re
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -125,7 +126,6 @@ def _probe_url(url: str) -> bool:
     """單一URL存活判定。403/429視為「被反爬蟲擋下,無法判斷」，一律當作
     存活(寧可漏抓真死連結,不要把正常網站誤判成死掉)。單次檢查內重試一次
     (間隔2秒)才真正判定失敗,降低單次網路抖動/暫時性擋擋誤判。"""
-    import time
     for attempt in range(2):
         try:
             resp = requests.get(url, timeout=REQUEST_TIMEOUT, headers=_BROWSER_HEADERS, allow_redirects=True)

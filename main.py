@@ -1498,7 +1498,7 @@ def run_portfolio_channel(key: str):
 
 def run_sig_content_watch():
     """留德網站(sig)內容維護監測，見scrapers/sig_content_watch.py開頭的
-    範圍說明——只做死連結檢查+updated_at過期提醒，週排程。沒有異常時
+    範圍說明——只做死連結檢查+updated_at過期提醒，季排程。沒有異常時
     完全不推播(避免每週固定「一切正常」造成通知疲勞)。"""
     key = sig_content_watch.SOURCE_ID
     message = sig_content_watch.run_check()

@@ -32,3 +32,8 @@ discord.py>=2.7
 # 零AI零GPU，不下載影片/音訊。2026-08-01實測比yt-dlp+deno輕量穩定，
 # 見scrapers/youtube_digest.py docstring。
 youtube-transcript-api>=1.0
+
+# realestate_scraper.py（不動產實價登錄首購快報，2026-08-05從finfeed併入）：
+# 內政部實價登錄批次ZIP下載，需要curl_cffi偽裝瀏覽器TLS指紋（跟house_591.py
+# 撞591.com.tw同一種SSL驗證問題不同，這裡是站台本身的反爬蟲層級）。
+curl_cffi>=0.7

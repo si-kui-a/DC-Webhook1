@@ -61,6 +61,7 @@ from scrapers import internship_gift
 from scrapers import internship_util
 from scrapers import youtube_digest
 from scrapers import house_591
+from scrapers import realestate_analysis, realestate_scraper
 import discord_bot_push
 
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
@@ -1390,6 +1391,95 @@ def run_daily_recap():
         )
 
 
+def run_realestate_report():
+    """不動產首購快報(2026-08-05從finfeed併入，見scrapers/realestate_
+    analysis.py開頭的搬移原因/已知缺口說明)。內政部實價登錄季資料→純
+    統計評分/趨勢→AI白話解讀→Discord+Telegram。月排程(季資料約30天後
+    才釋出，抓太頻繁沒有新資料)。"""
+    key = "realestate_report"
+    webhook_url = os.getenv("WEBHOOK_REALESTATE")
+    if not webhook_url:
+        logger.error("[%s] 缺少環境變數 WEBHOOK_REALESTATE，跳過", key)
+        return
+
+    seasons = realestate_scraper.roc_year_seasons(count=4)
+    logger.info("[%s] 分析區間 %s ~ %s", key, seasons[-1], seasons[0])
+
+    data, profiles = realestate_analysis.collect_district_data(seasons)
+    if not data:
+        logger.warning("[%s] 無任何縣市資料，本次跳過", key)
+        return
+
+    scored, hidden = realestate_analysis.score_districts(data, profiles)
+    if not scored:
+        logger.warning("[%s] 無任何行政區達到樣本門檻(%d)，本次跳過",
+                        key, realestate_analysis.MIN_DISPLAY_SAMPLE)
+        return
+
+    trend = realestate_analysis.market_trend(scored)
+    total_weight = sum(w for w, _ in realestate_analysis.WEIGHTS.values())
+    enter = [d for d in scored if d["分級"] == "推薦"][:5]
+    avoid = sorted(
+        (d for d in scored if d["分級"] == "避開"),
+        key=lambda x: x["總分"],
+    )[:5]
+
+    def _season_label(code: str) -> str:
+        year, _, season = code.partition("S")
+        return f"{year}年Q{season}" if season else code
+
+    def _entry(i: int, d: dict) -> str:
+        return f"{i}. {d['地區']} {d['總分']}/{total_weight}｜{d['理由']}"
+
+    lines = [
+        f"🏠 不動產首購快報｜{_season_label(seasons[-1])}~{_season_label(seasons[0])}（台中/台南/高雄）",
+        "",
+        f"價量狀態：{trend['價量狀態']} → {trend['買方意義']}",
+        f"追蹤 {trend['區數']} 區：上漲 {trend['上漲區數']} / 下跌 {trend['下跌區數']}，"
+        f"均價中位變化 {trend['價格中位變化']:+.1f}%",
+        "",
+        "🟢 推薦看屋",
+    ]
+    lines += [_entry(i, d) for i, d in enumerate(enter, 1)] if enter else ["（本期無區域達到推薦門檻）"]
+    lines += ["", "🔴 建議避開"]
+    lines += [_entry(i, d) for i, d in enumerate(avoid, 1)] if avoid else ["（本期無區域落入避開級距）"]
+    if hidden:
+        lines.append(f"\n另有 {hidden} 區單季成交不足{realestate_analysis.MIN_DISPLAY_SAMPLE}筆，不予顯示")
+
+    # ⚠️「可負擔總價上限」財務試算層目前不存在（見realestate_analysis.py
+    # 開頭TODO），這份報告只有評分/趨勢，沒有「你的射程」這類針對個人財務
+    # 狀況的判斷——使用者提供真實自備款/月收入/貸款成數/新青安利率年限後
+    # 再補這段。
+    lines += [
+        "",
+        "⚠️ 本期報告不含「可負擔總價上限」個人財務試算（此功能尚未補完），"
+        "純為區域評分與市場趨勢，出手前仍需自行評估貸款負擔能力。",
+    ]
+
+    raw_report_text = "\n".join(lines)
+
+    ai_text = ai_insight.realestate_interpretation(raw_report_text)
+    description = raw_report_text
+    if ai_text:
+        description += f"\n\n🤖 AI 解讀\n{ai_text}"
+    else:
+        logger.warning("[%s] AI解讀失敗/未設定GEMINI_API_KEY，退回純規則報告", key)
+
+    embed = build_embed(
+        title="不動產首購快報",
+        description=description[:4096],
+        url="",
+        footer="內政部實價登錄公開資料，純統計篩選，不構成投資建議",
+    )
+    ok, status, err = send_webhook(webhook_url, embed)
+    if ok:
+        logger.info("[%s] Discord推播成功", key)
+    else:
+        logger.error("[%s] Discord推播失敗：HTTP %s %s", key, status, err)
+
+    notify_telegram.send_message(description[:4000], parse_mode="")
+
+
 # 模擬持倉(紙上帳戶,使用者確認2026-07-30,見schema.sql同段落註解)：每個
 # 帳戶讀取對應大總結頻道「最近幾次」已產出的報告(不限定當天——tw_stock
 # 於台股收盤後13:30左右執行,當天晚上20:30才會有tw_stock_meta的新報告,
@@ -1648,7 +1738,7 @@ def run_crypto_nightly_recap():
 
 def main():
     parser = argparse.ArgumentParser(description="本地爬蟲 → Discord Webhook 推播")
-    parser.add_argument("--source", choices=list(SOURCE_REGISTRY.keys()) + ["all", "daily_recap", "crypto_nightly_recap"]
+    parser.add_argument("--source", choices=list(SOURCE_REGISTRY.keys()) + ["all", "daily_recap", "crypto_nightly_recap", "realestate_report"]
                                      + list(DIGEST_CHANNELS.keys()) + list(META_SUMMARY_CHANNELS.keys())
                                      + list(PORTFOLIO_CHANNELS.keys()),
                         help="執行單一來源（與 --scholarship 二選一）")
@@ -1723,6 +1813,8 @@ def main():
         run_daily_recap()
     elif args.source == "crypto_nightly_recap":
         run_crypto_nightly_recap()
+    elif args.source == "realestate_report":
+        run_realestate_report()
     elif args.source == "all":
         for key in SOURCE_REGISTRY:
             run_source(key)

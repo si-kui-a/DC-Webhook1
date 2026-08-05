@@ -598,3 +598,63 @@ def assess_stop_loss(position: dict, portfolio: dict, trigger_reason: str) -> di
     except Exception as e:
         logger.warning(f"gemini停損評估失敗: {e}")
         return None
+
+
+REALESTATE_ANALYST_PROMPT = """你是專門服務首購族的不動產分析師。讀者是 20 多歲、自備款有限、第一次買房的上班族,
+不看數據,只想知道三件事:哪一區買得起且住得下、哪一區該避開、現在該不該出手。
+語氣要像講給朋友聽,白話、不用術語。
+
+以下是程式依固定權重算出的區域評分結果(純統計,未經人工判讀):
+
+{raw_data}
+
+請用繁體中文依序回答:
+1. 推薦:「推薦看屋」清單中哪一到兩區最該先去看,理由必須引用清單裡的房型或均價數字。
+2. 避開:哪一到兩區最該避開,並說清楚問題是「價格在跌」還是「量縮到以後賣不掉」。
+3. 出手時機:順著資料中「此價量狀態對首購族的意義」展開,講清楚現在該積極看屋還是先存錢等等看。
+
+嚴格規則:
+1. 只能使用上方提供的數字,禁止提及任何未出現在資料中的建設、政策、人口、建案或新聞
+2. 不得推翻或反駁資料中標示「規則判定」的結論,只能順著它補充說明
+3. 要推測成因時必須明寫「推測」二字,且全文最多推測一項
+4. 資料不足以判斷時直接寫「資料不足」,不得編造
+5. 禁用「保證」「必漲」「穩賺」「閉眼買」等字眼,也不得對貸款成數、利率或購屋補助資格做出承諾
+6. 全文 250 字以內,純文字條列,不使用 *、#、_ 等符號"""
+
+
+def realestate_interpretation(raw_report_text: str) -> str | None:
+    """不動產首購快報的AI語意解讀(2026-08-05從finfeed併入，同一份prompt
+    逐字保留——它本身就有明確的反幻覺規則，不是這次新寫的)。純統計評分/
+    趨勢(scrapers/realestate_analysis.py)已經算完，這裡只負責把數字轉成
+    給首購族看得懂的白話文，不重新計算任何數字。
+
+    回傳解讀文字或None(呼叫失敗/回應格式不對，呼叫端退回純規則結論，
+    不讓整份報告開天窗)。"""
+    api_key = os.getenv("GEMINI_API_KEY", "")
+    if not api_key:
+        return None
+
+    prompt = REALESTATE_ANALYST_PROMPT.format(raw_data=raw_report_text[:6000])
+
+    url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent"
+    body = json.dumps({
+        "contents": [{"role": "user", "parts": [{"text": prompt}]}],
+        "generationConfig": {"temperature": 0.3},
+    }).encode("utf-8")
+    req = urllib.request.Request(
+        url, data=body,
+        headers={"Content-Type": "application/json", "x-goog-api-key": api_key},
+        method="POST",
+    )
+
+    def _do():
+        with urllib.request.urlopen(req, timeout=TIMEOUT_SECONDS) as resp:
+            return json.loads(resp.read().decode("utf-8"))
+
+    try:
+        data = _with_retry(_do)
+        text = data["candidates"][0]["content"]["parts"][0]["text"].strip()
+        return text or None
+    except Exception as e:
+        logger.warning(f"gemini不動產解讀失敗: {e}")
+        return None

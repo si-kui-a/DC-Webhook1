@@ -40,6 +40,7 @@ from dotenv import load_dotenv
 
 import ai_insight
 import db
+import index_dca_engine
 import price_feed
 import summarizer_en
 import summarizer_zh
@@ -1300,14 +1301,21 @@ def run_daily_recap():
         )
 
 
-# 模擬持倉(紙上帳戶,使用者確認2026-07-30,見schema.sql同段落註解)：每個
-# 帳戶讀取對應大總結頻道「最近幾次」已產出的報告(不限定當天——tw_stock
-# 於台股收盤後13:30左右執行,當天晚上20:30才會有tw_stock_meta的新報告,
-# 收盤時點只有前一晚的報告可用,見db.get_recent_summaries()；PAT-15
-# enrichment之後改用這個而非單筆的get_latest_summary())，交給AI決定
-# 進出場，全部是模擬交易，不動用真實資金。3個帳戶各自獨立頻道(使用者
-# 確認2026-07-30)，不共用webhook——避免3個帳戶的動作/持倉訊息混在同一個
-# 頻道裡難以分辨。
+# 模擬持倉(紙上帳戶,使用者確認2026-07-30,見schema.sql同段落註解)：全部是
+# 模擬交易，不動用真實資金。3個帳戶各自獨立頻道(使用者確認2026-07-30)，
+# 不共用webhook——避免3個帳戶的動作/持倉訊息混在同一個頻道裡難以分辨。
+#
+# tw_stock_portfolio(2026-08-06起改版，使用者指示)：原本跟另外兩個帳戶
+# 一樣交給AI(Gemini)即時判斷個股進出場，但自2026-07-30建立以來從未真正
+# 買進過(全部觀望)。改為index_dca_engine.py的規則式指數ETF(0050/006208)
+# 定期定額，完全不呼叫AI，見run_portfolio_channel()裡的tw_stock分流。
+# meta_source_id/angle兩個欄位對AI路徑才有意義，tw_stock已不使用。
+#
+# crypto_futures_portfolio/crypto_discretionary_portfolio(未改版)：讀取
+# 對應大總結頻道「最近幾次」已產出的報告(不限定當天——tw_stock_meta於
+# 台股收盤後13:30左右執行,當天晚上20:30才會有新報告,收盤時點只有前一晚
+# 的報告可用,見db.get_recent_summaries()；PAT-15 enrichment之後改用這個
+# 而非單筆的get_latest_summary())，交給AI決定進出場。
 PORTFOLIO_CHANNELS = {
     "tw_stock_portfolio": {
         "portfolio_id": "tw_stock",
@@ -1354,14 +1362,85 @@ def _price_with_pnl(position: dict) -> dict | None:
     }
 
 
+def _run_tw_stock_dca(key: str, config: dict):
+    """tw_stock_portfolio的規則式定期定額(2026-08-06新增，使用者指示，
+    見index_dca_engine.py開頭說明)。排程仍是工作日每天跑一次(見
+    scripts/setup_scheduled_tasks.ps1)，但本月已經注入過定額(trade_log
+    有本月的action='deposit'紀錄)就直接跳過、不重複扣款/不推播——避免
+    一個月20幾個工作日各推播一次「本月已完成」造成通知疲勞。"""
+    portfolio_id = config["portfolio_id"]
+    webhook_url = os.getenv(config["webhook_env"])
+    if not webhook_url:
+        logger.error("[%s] 缺少環境變數 %s，跳過", key, config["webhook_env"])
+        return
+
+    db.init_portfolios()
+    trade_date = datetime.now(TAIWAN_TZ).strftime("%Y-%m-%d")
+    this_month = trade_date[:7]  # YYYY-MM
+
+    recent_trades = db.get_recent_trades(portfolio_id, limit=10)
+    if any(t["action"] == "deposit" and t["trade_date"][:7] == this_month for t in recent_trades):
+        logger.info("[%s] 本月定期定額已執行過，跳過", key)
+        return
+
+    contribution_reasoning = f"每月定期定額注入{index_dca_engine.MONTHLY_CONTRIBUTION:.0f} TWD"
+    db.deposit_cash(portfolio_id, index_dca_engine.MONTHLY_CONTRIBUTION, trade_date, contribution_reasoning)
+    action_lines = [f"• 入金：{contribution_reasoning}"]
+
+    portfolio = db.get_portfolio(portfolio_id)
+    technical_snapshots = {
+        symbol: price_feed.get_technical_snapshot(symbol) for symbol in index_dca_engine.TARGET_SYMBOLS
+    }
+    plans = index_dca_engine.decide_monthly_buys(portfolio["current_cash"], technical_snapshots)
+
+    for plan in plans:
+        if plan["amount"] <= 0:
+            action_lines.append(f"• {plan['symbol']}：本月暫停加碼（{plan['reasoning']}）")
+            continue
+        price = price_feed.get_price(plan["symbol"])
+        if price is None or price <= 0:
+            logger.warning("[%s] %s 查無現價，本次跳過此標的", key, plan["symbol"])
+            action_lines.append(f"• {plan['symbol']}：查無現價，本次跳過")
+            continue
+        quantity = plan["amount"] / price
+        db.open_position(portfolio_id, plan["symbol"], "long", quantity, price, 1.0, trade_date, plan["reasoning"])
+        action_lines.append(
+            f"• 買進 {plan['symbol']} 數量{quantity:g}（價{price:g}，"
+            f"金額{plan['amount']:,.2f}）：{plan['reasoning']}"
+        )
+
+    final_positions = []
+    for p in db.get_open_positions(portfolio_id):
+        priced = _price_with_pnl(p)
+        final_positions.append(priced if priced is not None else {
+            **p, "current_price": "?", "unrealized_pnl": 0,
+            "market_value": p["avg_cost"] * p["quantity"] / p["leverage"],
+        })
+
+    portfolio = db.get_portfolio(portfolio_id)
+    embed = digest_format.build_portfolio_embed(config["channel_title"], trade_date, portfolio, final_positions, action_lines)
+    ok, status, err = send_webhook(webhook_url, embed)
+    if ok:
+        logger.info("[%s] 定期定額推播成功，%d 個動作、%d 筆持倉", key, len(action_lines), len(final_positions))
+    else:
+        logger.error("[%s] 推播失敗：HTTP %s %s", key, status, err)
+
+
 def run_portfolio_channel(key: str):
     """模擬持倉頻道：讀取對應大總結報告+目前持倉現價，交給AI決定進出場，
     實際執行(寫db.trade_log/position/portfolio.current_cash)後推播今日
     動作+目前持倉摘要。任一步驟失敗(缺webhook/缺報告/查價失敗/Gemini失敗)
     一律整批跳過，不半套執行——避免「AI決定要交易但價格查不到」這種
-    半吊子狀態寫進trade_log。"""
+    半吊子狀態寫進trade_log。
+
+    tw_stock_portfolio例外：2026-08-06起改用index_dca_engine.py的規則式
+    定期定額，完全不呼叫AI，見_run_tw_stock_dca()。"""
     config = PORTFOLIO_CHANNELS[key]
     portfolio_id = config["portfolio_id"]
+
+    if portfolio_id == "tw_stock":
+        _run_tw_stock_dca(key, config)
+        return
 
     webhook_url = os.getenv(config["webhook_env"])
     if not webhook_url:

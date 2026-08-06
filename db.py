@@ -383,6 +383,25 @@ def record_hold(portfolio_id: str, trade_date: str, reasoning: str):
     conn.close()
 
 
+def deposit_cash(portfolio_id: str, amount: float, trade_date: str, reasoning: str):
+    """模擬每月定期定額的「新增現金」動作(2026-08-06新增,供index_dca_engine
+    使用)：current_cash直接加上amount,寫入trade_log(action='deposit')留痕，
+    供get_recent_trades()判斷「這個月是否已經注入過本月定額」的節流依據。"""
+    now = datetime.now(timezone.utc).isoformat()
+    conn = get_conn()
+    conn.execute(
+        "UPDATE portfolio SET current_cash = current_cash + ? WHERE portfolio_id=?",
+        (amount, portfolio_id),
+    )
+    conn.execute(
+        """INSERT INTO trade_log (portfolio_id, trade_date, action, price, reasoning, created_at)
+           VALUES (?, ?, 'deposit', ?, ?, ?)""",
+        (portfolio_id, trade_date, amount, reasoning, now),
+    )
+    conn.commit()
+    conn.close()
+
+
 def get_items_since(source_ids: list[str], since_iso: str) -> list[dict]:
     """回傳指定來源在since_iso之後新抓到的項目(title/summary/fetched_at)，
     供check_triggers.py的「消息面」關鍵字比對用(2026-07-31新增)。"""

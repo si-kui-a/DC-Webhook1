@@ -39,6 +39,7 @@ STOCK_DAY_ALL_URL = "https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL
 BINANCE_TICKER_URL = "https://api.binance.com/api/v3/ticker/price"
 STOCK_DAY_URL = "https://www.twse.com.tw/exchangeReport/STOCK_DAY"  # 個股歷史(已直接curl驗證,同etf0050.py既有做法)
 BINANCE_KLINES_URL = "https://api.binance.com/api/v3/klines"
+ODD_LOT_URL = "https://openapi.twse.com.tw/v1/exchangeReport/BFT41U"  # 盤後零股當日成交(已直接curl驗證)
 
 # 台股全市場收盤價每個process只查一次,查完快取在記憶體——單次cron執行
 # 的生命週期內重複查多檔股票不需要重打全市場快照(單次回傳約2000+檔,
@@ -92,6 +93,30 @@ def _get_tw_stock_price(code: str) -> float | None:
             except (KeyError, ValueError, TypeError):
                 continue
     return _twse_cache.get(code)
+
+
+_odd_lot_cache: dict[str, float] | None = None
+
+
+def get_odd_lot_price(code: str) -> float | None:
+    """回傳code當天盤後零股(BFT41U)的成交價——tw_stock帳戶每月定期定額
+    金額很小(50~100 TWD),實際只買得起零股,應該用零股市場的實際成交價
+    而非整股(STOCK_DAY_ALL)收盤價計算購買數量,兩者在盤勢劇烈時可能不同
+    (2026-08-06使用者指示)。當天該檔無零股成交(TradePrice缺漏/空白)則
+    回傳None,呼叫端(main._run_tw_stock_dca)應退回_get_tw_stock_price()
+    的整股收盤價,不可用0頂替。"""
+    global _odd_lot_cache
+    if _odd_lot_cache is None:
+        data = _get_with_retry(ODD_LOT_URL)
+        if not isinstance(data, list):
+            return None
+        _odd_lot_cache = {}
+        for row in data:
+            try:
+                _odd_lot_cache[row["Code"]] = float(row["TradePrice"])
+            except (KeyError, ValueError, TypeError):
+                continue
+    return _odd_lot_cache.get(code)
 
 
 def _get_crypto_price(symbol: str) -> float | None:

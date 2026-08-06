@@ -66,9 +66,12 @@ try {
     Write-Output "失敗: IntelPusher-Evening2030 -- $($_.Exception.Message)"
 }
 
-# 模擬持倉-台股(台股收盤後,工作日14:00)
+# 模擬持倉-台股(工作日14:40，2026-08-06改由14:00延後：tw_stock改用零股
+# (BFT41U)當日成交價買進後，要等盤後零股單一價撮合(13:40-14:30)完成、
+# 資料才會到位，14:00執行會撈到「今天還沒撮合完」而退回整股價，改到
+# 14:40確保零股成交價已可查)
 New-IntelPusherTask -Name 'IntelPusher-TwStockPortfolio' -Source 'tw_stock_portfolio' `
-    -Trigger (New-ScheduledTaskTrigger -Weekly -DaysOfWeek Monday,Tuesday,Wednesday,Thursday,Friday -At 2:00PM)
+    -Trigger (New-ScheduledTaskTrigger -Weekly -DaysOfWeek Monday,Tuesday,Wednesday,Thursday,Friday -At 2:40PM)
 
 # 模擬持倉-幣圈：原本這裡是IntelPusher-CryptoFuturesPortfolio/
 # IntelPusher-CryptoDiscretionaryPortfolio兩個每小時排程(各24次/天，

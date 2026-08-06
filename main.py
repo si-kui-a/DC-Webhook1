@@ -1397,7 +1397,14 @@ def _run_tw_stock_dca(key: str, config: dict):
         if plan["amount"] <= 0:
             action_lines.append(f"• {plan['symbol']}：本月暫停加碼（{plan['reasoning']}）")
             continue
-        price = price_feed.get_price(plan["symbol"])
+        # 買進金額很小(50~100 TWD),實際只買得起零股,用零股當天成交價
+        # (2026-08-06使用者指示)；當天該檔無零股成交時退回整股收盤價，
+        # 不可用0頂替(會讓quantity/PnL計算失真)。
+        price = price_feed.get_odd_lot_price(plan["symbol"])
+        price_source = "零股"
+        if price is None or price <= 0:
+            price = price_feed.get_price(plan["symbol"])
+            price_source = "整股(當日無零股成交)"
         if price is None or price <= 0:
             logger.warning("[%s] %s 查無現價，本次跳過此標的", key, plan["symbol"])
             action_lines.append(f"• {plan['symbol']}：查無現價，本次跳過")
@@ -1405,7 +1412,7 @@ def _run_tw_stock_dca(key: str, config: dict):
         quantity = plan["amount"] / price
         db.open_position(portfolio_id, plan["symbol"], "long", quantity, price, 1.0, trade_date, plan["reasoning"])
         action_lines.append(
-            f"• 買進 {plan['symbol']} 數量{quantity:g}（價{price:g}，"
+            f"• 買進 {plan['symbol']} 數量{quantity:g}（{price_source}價{price:g}，"
             f"金額{plan['amount']:,.2f}）：{plan['reasoning']}"
         )
 

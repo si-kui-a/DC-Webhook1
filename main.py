@@ -1480,7 +1480,18 @@ def run_portfolio_channel(key: str):
     decision = ai_insight.build_trade_decision(config["angle"], portfolio, positions, recent_trades, recent_reports, win_stats)
     if not decision:
         logger.error("[%s] Gemini決策失敗（額度用盡/網路錯誤/回應格式不對），本次跳過", key)
-        return
+        # AI is optional: preserve the deterministic core with a safe HOLD.
+        logger.warning("[%s] AI unavailable; degrading to deterministic HOLD", key)
+        decision = {
+            "actions": [
+                {"action": "hold", "symbol": p.get("symbol", ""),
+                 "side": p.get("side", "long"), "cash_ratio": 0.0,
+                 "leverage": 1.0, "position_id": p.get("position_id", ""),
+                 "reasoning": "AI unavailable; no position change"}
+                for p in positions
+            ],
+            "next_trigger": {},
+        }
 
     trade_date = datetime.now().strftime("%Y-%m-%d")
     is_crypto_futures = portfolio_id == "crypto_futures"

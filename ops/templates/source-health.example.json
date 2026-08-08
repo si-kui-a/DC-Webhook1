@@ -1,0 +1,10 @@
+{
+  "example_source": {
+    "state": "unknown",
+    "failure_count": 0,
+    "cooldown_minutes": 60,
+    "reason": "replace with source-specific health evidence",
+    "last_success": null,
+    "next_retry": null
+  }
+}

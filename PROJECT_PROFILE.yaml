@@ -1,0 +1,6 @@
+profile: service-automation
+AI_REQUIRED: false
+offline_check: "python scripts/verify_project_contract.py && python scripts/run_profile_checks.py"
+run_command: "see README for the documented production command"
+rollback: "restore the recorded Git commit or archive backup"
+owner: "repository maintainer"

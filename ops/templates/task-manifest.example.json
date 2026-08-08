@@ -1,0 +1,13 @@
+{
+  "project": "REPLACE_WITH_PROJECT_NAME",
+  "tasks": [
+    {
+      "name": "example_task",
+      "script": "scripts/example.py",
+      "arguments": [],
+      "timeout_seconds": 900,
+      "allow_overlap": false,
+      "dry_run": true
+    }
+  ]
+}

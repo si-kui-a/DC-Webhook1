@@ -32,6 +32,19 @@ try {
   $code = [int]$p.ExitCode
   $end = Get-Date
   "stdout=$stdout`nstderr=$stderr`nend=$end exit_code=$code duration_sec=$([int]($end-$start).TotalSeconds)" | Add-Content -LiteralPath $log
+  $status = if ($code -eq 0) { "SUCCESS_CORE" } else { "FAILED_CORE" }
+  $result = [ordered]@{
+    task = $Task
+    run_id = $runId
+    commit = $sha
+    status = $status
+    started_at = $start.ToUniversalTime().ToString('o')
+    finished_at = $end.ToUniversalTime().ToString('o')
+    duration_ms = [int](($end - $start).TotalMilliseconds)
+    message = if ($code -eq 0) { "process completed" } else { "process failed" }
+    error_code = if ($code -eq 0) { $null } else { [string]$code }
+  }
+  $result | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $logDir "$Task-$runId.result.json") -Encoding utf8
   if ($code -ne 0) { exit $code }
 } finally {
   Remove-Item -LiteralPath $lock -Force -ErrorAction SilentlyContinue

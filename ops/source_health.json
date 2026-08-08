@@ -1,0 +1,7 @@
+{
+  "internship_gift": {"state":"disabled", "reason":"source returned repeated HTTP 404", "failure_count":4},
+  "gemini": {"state":"degraded", "reason":"quota/network/format failures observed", "cooldown_minutes":60},
+  "realestate_report": {"state":"unknown", "reason":"scheduled task has not produced a first successful run"},
+  "resume_bot": {"state":"degraded", "reason":"scheduled task terminated unexpectedly"},
+  "backup": {"state":"degraded", "reason":"remote ref/non-fast-forward verification failures"}
+}

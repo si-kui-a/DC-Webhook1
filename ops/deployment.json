@@ -1,0 +1,8 @@
+{
+  "environment": "production",
+  "repo": "si-kui-a/DC-Webhook1",
+  "approved_commit": null,
+  "approved_at": null,
+  "promotion_status": "not-deployed",
+  "notes": "Set approved_commit only after CI, dry-run, healthcheck and backup verification pass."
+}

@@ -120,3 +120,5 @@ intel-pusher/
 ## ¯²«Î·j´M¡]¹s AI¡^
 ¯²«Î¨Ó·½¤£¦Û°Ê²q´ú¡F¥H `RENTAL_FEED_URLS` ©ú½T¦C¥X¤wÀò±ÂÅvªº RSS¡BJSON ©Î HTML ¨Ó·½¡C¥i¥Î `RENTAL_AREAS`¡B`RENTAL_MAX_MONTHLY`¡B`RENTAL_MIN_PING`¡B`RENTAL_KEYWORDS`¡B`RENTAL_EXCLUDE` ¿z¿ï¡C
 ³]©w `WEBHOOK_RENTAL_SEARCH` «á°õ¦æ `python main.py --source rental_search`¡F¥¼³]©w¨Ó·½®É·|¦w¥þ¦a°O¿ý¬°¥¼°t¸m¡A¤£·|§ì¨ú¥¼ª¾ºô¯¸¡C
+
+ä¾†æºç›®éŒ„å¦æ”¶éŒ„è‡ºåŒ—å¸‚ã€æ–°åŒ—å¸‚æ”¿åºœé–‹æ”¾è³‡æ–™ã€åœ‹å®¶ä½å®…åŠéƒ½å¸‚æ›´æ–°ä¸­å¿ƒèˆ‡æ–°åŒ—ä½éƒ½ä¸­å¿ƒå…¬å‘Šï¼›å„ä¾†æºå…ˆç¶“ PENDING_REVIEWï¼Œç¢ºèªå¯¦éš›ä¸‹è¼‰ç«¯é»žèˆ‡æ¬„ä½å¾Œæ‰å•Ÿç”¨ã€‚

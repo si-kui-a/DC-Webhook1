@@ -477,9 +477,16 @@ def run_scholarship():
             raw_items = fetch_fn()
         except Exception as e:
             fail_count = db.record_fetch_failure(source_id)
+            record_source_health(SOURCE_HEALTH_PATH, source_id, "FAILED", error=str(e))
             logger.error("[%s] 抓取失敗（累計 %d 次）: %s", key, fail_count, e)
             continue
 
+        report = validate_items(raw_items)
+        raw_items = report.accepted
+        if report.rejected:
+            logger.warning("[%s] PARTIAL rejected=%d errors=%s", key, report.rejected, report.errors[:3])
+        health_status = "PARTIAL" if report.rejected else ("EMPTY_VALID" if not raw_items else "SUCCESS")
+        record_source_health(SOURCE_HEALTH_PATH, source_id, health_status, item_count=len(raw_items), rejected_count=report.rejected)
         db.record_fetch_success(source_id)
         if not raw_items:
             logger.info("[%s] 無資料", key)
@@ -713,9 +720,16 @@ def run_internship():
             raw_items = fetch_fn()
         except Exception as e:
             fail_count = db.record_fetch_failure(source_id)
+            record_source_health(SOURCE_HEALTH_PATH, source_id, "FAILED", error=str(e))
             logger.error("[%s] 抓取失敗（累計 %d 次）: %s", key, fail_count, e)
             continue
 
+        report = validate_items(raw_items)
+        raw_items = report.accepted
+        if report.rejected:
+            logger.warning("[%s] PARTIAL rejected=%d errors=%s", key, report.rejected, report.errors[:3])
+        health_status = "PARTIAL" if report.rejected else ("EMPTY_VALID" if not raw_items else "SUCCESS")
+        record_source_health(SOURCE_HEALTH_PATH, source_id, health_status, item_count=len(raw_items), rejected_count=report.rejected)
         db.record_fetch_success(source_id)
         if not raw_items:
             logger.info("[%s] 無資料", key)

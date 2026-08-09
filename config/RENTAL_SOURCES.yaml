@@ -55,3 +55,23 @@ sources:
     endpoint: https://data.gov.taipei/dataset/listdownload
     license: 政府資料開放授權條款-第1版
     status: PENDING_REVIEW
+  - source_id: thu.cloud_rental
+    name: 東海大學雲端租屋生活網
+    kind: html
+    endpoint: https://house.nfu.edu.tw/THU
+    refresh: daily
+    status: PENDING_REVIEW
+    note: 校方學生租屋平台；需確認列表端點、欄位與 robots 後啟用
+  - source_id: thu.offcampus_rental_service
+    name: 東海大學生活輔導組校外賃居服務
+    kind: html
+    endpoint: https://stulife.thu.edu.tw/web/page/page.php?scid=10&sid=9
+    refresh: daily
+    status: PENDING_REVIEW
+    note: 官方公告、租屋安全與補助資訊；房源頁與公告頁分開驗證
+  - source_id: kobeing.thu_rentals
+    name: 柯比意東海租屋／短租
+    kind: html
+    endpoint: https://www.kobeing24.com/
+    status: PENDING_AUTHORIZATION
+    note: 學生導向商業平台；需取得自動化使用授權後啟用

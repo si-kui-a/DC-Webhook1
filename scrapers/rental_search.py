@@ -24,6 +24,7 @@ from .http_client import get
 SOURCE_ID = "rental.search"
 SOURCE_NAME = "租屋搜尋（明確設定來源）"
 SOURCE_KIND = "rental"
+MALE_ONLY_TERMS = ("限男性", "男性限定", "限男生", "男生限定", "男宿")
 
 
 def _csv_env(name: str) -> list[str]:
@@ -165,6 +166,8 @@ def _matches(item: dict, *, areas: list[str], keywords: list[str], excludes: lis
     if keywords and not all(word.lower() in haystack for word in keywords):
         return False
     if excludes and any(word.lower() in haystack for word in excludes):
+        return False
+    if any(term.lower() in haystack for term in MALE_ONLY_TERMS):
         return False
     rent = item.get("rent_monthly")
     if min_rent is not None and (rent is None or rent < min_rent):

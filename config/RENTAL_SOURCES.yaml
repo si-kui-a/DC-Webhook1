@@ -24,3 +24,34 @@ sources:
     kind: html
     endpoint: https://www.sinyi.com.tw/rent
     status: PENDING_AUTHORIZATION
+  - source_id: taipei.social_housing_statistics
+    name: 臺北市社會住宅租賃及管理統計
+    kind: csv_api
+    endpoint: https://data.gov.tw/en/datasets/155779
+    license: 政府資料開放授權條款-第1版
+    refresh: yearly
+    status: PENDING_REVIEW
+  - source_id: ntpc.rental_transactions
+    name: 新北市不動產實價登錄租賃案件
+    kind: csv_api
+    endpoint: https://data.ntpc.gov.tw/datasets/18d62577-1d5f-4967-ab9c-d71faba8cde1
+    license: 政府資料開放授權條款-第1版
+    status: PENDING_REVIEW
+  - source_id: hurc.social_housing_news
+    name: 國家住宅及都市更新中心社會住宅最新訊息
+    kind: html
+    endpoint: https://www.hurc.org.tw/hurc/docList?pid=227&uid=292
+    refresh: daily
+    status: PENDING_REVIEW
+  - source_id: nt_hurc.leasing_news
+    name: 新北市住都中心招租公告
+    kind: html
+    endpoint: https://www.nthurc.org.tw/leasing-news/76
+    refresh: daily
+    status: PENDING_REVIEW
+  - source_id: taipei.opendata_catalog
+    name: 臺北市資料大平台開放資料目錄
+    kind: csv_api
+    endpoint: https://data.gov.taipei/dataset/listdownload
+    license: 政府資料開放授權條款-第1版
+    status: PENDING_REVIEW

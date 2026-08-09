@@ -16,7 +16,7 @@ FIRST_RUN_PUSH_CAP），而不是在這裡直接丟棄舊資料，這樣未來�
 """
 import xml.etree.ElementTree as ET
 
-import requests
+from scrapers import http_client
 
 SOURCE_ID = "cbc.press_releases"
 SOURCE_NAME = "台灣中央銀行-新聞稿"
@@ -28,7 +28,7 @@ HEADERS = {
 
 
 def fetch() -> list[dict]:
-    resp = requests.get(BASE_URL, headers=HEADERS, timeout=15)
+    resp = http_client.get(BASE_URL, headers=HEADERS, timeout=15)
     resp.raise_for_status()
     root = ET.fromstring(resp.content)
 

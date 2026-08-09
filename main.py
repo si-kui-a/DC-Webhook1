@@ -46,7 +46,7 @@ import summarizer_en
 import summarizer_zh
 import notify_telegram
 from push_webhook import build_embed, send_webhook
-from scrapers import tsmc, fed, cbc, etf0050, macro_fred, twse_financials
+from scrapers import tsmc, fed, cbc, etf0050, macro_fred, twse_financials, rental_search
 from scrapers.contracts import validate_items
 from scrapers.health import record as record_source_health
 from scrapers import substack_generic
@@ -99,6 +99,7 @@ SOURCE_REGISTRY = {
                   twse_financials.SOURCE_NAME_TSMC, twse_financials.SOURCE_ID_TSMC),
     "twse_chunghwa": (twse_financials.fetch_chunghwa, "WEBHOOK_CHUNGHWA",
                       twse_financials.SOURCE_NAME_CHUNGHWA, twse_financials.SOURCE_ID_CHUNGHWA),
+    "rental_search": (rental_search.fetch, "WEBHOOK_RENTAL_SEARCH", rental_search.SOURCE_NAME, rental_search.SOURCE_ID),
 }
 
 # 獎學金來源（批次模式，共用一個 webhook URL，推播合併為一條訊息）

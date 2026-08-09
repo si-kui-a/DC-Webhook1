@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse, json, re, sys
 from pathlib import Path
 
-KINDS = {"rss", "json", "csv", "html"}
+KINDS = {"rss", "json", "csv", "html", "rental"}
 STATUSES = {"PENDING_REVIEW", "ENABLED", "DISABLED"}
 
 def parse(path: Path) -> list[dict]:

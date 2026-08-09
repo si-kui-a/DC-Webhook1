@@ -116,3 +116,7 @@ intel-pusher/
 â””â”€â”€ scripts/
     â””â”€â”€ setup_scheduled_tasks.ps1   # å»ºç«‹Windows Task ScheduleræŽ’ç¨‹(éœ€ç³»çµ±ç®¡ç†å“¡)
 ```
+
+## ¯²«Î·j´M¡]¹s AI¡^
+¯²«Î¨Ó·½¤£¦Û°Ê²q´ú¡F¥H `RENTAL_FEED_URLS` ©ú½T¦C¥X¤wÀò±ÂÅvªº RSS¡BJSON ©Î HTML ¨Ó·½¡C¥i¥Î `RENTAL_AREAS`¡B`RENTAL_MAX_MONTHLY`¡B`RENTAL_MIN_PING`¡B`RENTAL_KEYWORDS`¡B`RENTAL_EXCLUDE` ¿z¿ï¡C
+³]©w `WEBHOOK_RENTAL_SEARCH` «á°õ¦æ `python main.py --source rental_search`¡F¥¼³]©w¨Ó·½®É·|¦w¥þ¦a°O¿ý¬°¥¼°t¸m¡A¤£·|§ì¨ú¥¼ª¾ºô¯¸¡C

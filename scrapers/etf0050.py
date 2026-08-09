@@ -32,6 +32,7 @@ from datetime import date
 from typing import Optional
 
 import requests
+from scrapers import http_client
 
 SOURCE_ID = "stockintelli.tracking"
 SOURCE_NAME = "股市智投-台股追蹤"
@@ -143,7 +144,7 @@ def _fetch_institutional_flow(date_str: str) -> dict[str, dict] | None:
     抓取失敗回傳None，不影響其餘既有股價追蹤功能。"""
     url = T86_URL.format(date=date_str)
     try:
-        resp = requests.get(url, headers=HEADERS, timeout=15)
+        resp = http_client.get(url, headers=HEADERS, timeout=15)
         resp.raise_for_status()
         data = resp.json()
     except (requests.RequestException, ValueError):
@@ -207,7 +208,7 @@ def _fetch_closing_prices(code: str, months_back: int = 7) -> list[float]:
     for month_start in months:
         url = STOCK_DAY_URL.format(date=month_start.strftime("%Y%m%d"), code=code)
         try:
-            resp = requests.get(url, headers=HEADERS, timeout=15)
+            resp = http_client.get(url, headers=HEADERS, timeout=15)
             resp.raise_for_status()
             data = resp.json()
         except (requests.RequestException, ValueError):
@@ -262,7 +263,7 @@ def fetch() -> list[dict]:
     for code, name, sector in WATCHLIST:
         url = f"{BASE_URL}/stock/{code}"
         try:
-            resp = requests.get(url, headers=HEADERS, timeout=15)
+            resp = http_client.get(url, headers=HEADERS, timeout=15)
             resp.raise_for_status()
         except requests.RequestException as e:
             items.append({

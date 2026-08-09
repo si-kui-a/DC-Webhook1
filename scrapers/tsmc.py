@@ -15,6 +15,7 @@ scrapers/tsmc.py — 台積電新聞稿（月營收公告、法說會公告等�
 import re
 
 import requests
+from scrapers import http_client
 from bs4 import BeautifulSoup
 
 # 已抽樣 6 篇 tsmc 新聞稿正文開頭（含 revenue report / shareholders meeting /
@@ -44,7 +45,7 @@ HEADERS = {
 
 
 def fetch() -> list[dict]:
-    resp = requests.get(LIST_URL, headers=HEADERS, timeout=15)
+    resp = http_client.get(LIST_URL, headers=HEADERS, timeout=15)
     resp.raise_for_status()
     soup = BeautifulSoup(resp.text, "html.parser")
 
@@ -74,7 +75,7 @@ def fetch_detail_text(url: str) -> str:
     跟同一頁的圖片欄位（field--name-field-image）、聯絡人資訊
     （.articleSubInfo）分開，不需要額外排除雜訊。
     """
-    resp = requests.get(url, headers=HEADERS, timeout=15)
+    resp = http_client.get(url, headers=HEADERS, timeout=15)
     resp.raise_for_status()
     soup = BeautifulSoup(resp.text, "html.parser")
 

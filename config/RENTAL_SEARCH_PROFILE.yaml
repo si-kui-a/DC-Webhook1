@@ -35,3 +35,8 @@ subsidy:
   preferred_effective_max_monthly: 4000
   explicit_amount_required_for_confirmation: true
   note: 未提供租補金額的房源只列為補助待核，不宣稱符合。
+cooking:
+  preference: prefer
+  allowed: 加分
+  not_allowed: 納入
+  unknown: 納入但標記待確認

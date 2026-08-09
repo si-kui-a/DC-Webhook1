@@ -64,3 +64,12 @@ def test_subsidy_after_rent_is_used_for_budget():
         items = fetch(urls=["https://rent.example/feed.json"], areas=["台中"], min_rent=3000, max_rent=4500, room_types=["套房"])
     assert [item["url"] for item in items] == ["https://rent.example/subsidy"]
     assert items[0]["rent_after_subsidy"] == 4000
+
+def test_cooking_allowed_is_preferred_but_not_required():
+    body = json.dumps({"results": [
+        {"title": "套房 不可開伙", "url": "https://rent.example/no-cook", "rent": 3500, "cooking": "不可開伙", "location": "台中西屯"},
+        {"title": "套房 可開伙", "url": "https://rent.example/cook", "rent": 3500, "cooking": "可開伙", "location": "台中西屯"},
+    ]})
+    with patch("scrapers.rental_search.get", return_value=response(body, "application/json")):
+        items = fetch(urls=["https://rent.example/feed.json"], areas=["台中"], min_rent=3000, max_rent=4500, room_types=["套房"])
+    assert [item["url"] for item in items] == ["https://rent.example/cook", "https://rent.example/no-cook"]

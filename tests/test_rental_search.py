@@ -45,3 +45,12 @@ def test_missing_configuration_is_explicit():
             assert "RENTAL_FEED_URLS" in str(exc)
         else:
             raise AssertionError("missing rental feed must not silently succeed")
+
+def test_explicit_male_only_listing_is_excluded():
+    body = json.dumps({"results": [
+        {"title": "套房 限男性", "url": "https://rent.example/male", "rent": 3500, "location": "台中西屯"},
+        {"title": "套房 男女皆可", "url": "https://rent.example/open", "rent": 3500, "location": "台中西屯"},
+    ]})
+    with patch("scrapers.rental_search.get", return_value=response(body, "application/json")):
+        items = fetch(urls=["https://rent.example/feed.json"], areas=["台中"], min_rent=3000, max_rent=4500, room_types=["套房"])
+    assert [item["url"] for item in items] == ["https://rent.example/open"]

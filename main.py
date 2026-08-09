@@ -48,6 +48,7 @@ import notify_telegram
 from push_webhook import build_embed, send_webhook
 from scrapers import tsmc, fed, cbc, etf0050, macro_fred, twse_financials
 from scrapers.contracts import validate_items
+from scrapers.health import record as record_source_health
 from scrapers import substack_generic
 from scrapers import semi_supply_chain
 import digest_format
@@ -63,6 +64,7 @@ from scrapers import sig_content_watch
 
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
 WORK_DIR = os.path.join(PROJECT_ROOT, "work")
+SOURCE_HEALTH_PATH = os.path.join(WORK_DIR, "source_health.json")
 os.makedirs(WORK_DIR, exist_ok=True)
 
 _LOG_FORMAT = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
@@ -201,6 +203,7 @@ def run_source(key: str):
         return
     except Exception as e:
         fail_count = db.record_fetch_failure(source_id)
+        record_source_health(SOURCE_HEALTH_PATH, source_id, "FAILED", error=str(e))
         logger.error(f"[{key}] 抓取失敗（累計 {fail_count} 次）：{e}", exc_info=True)
         if fail_count >= FAIL_THRESHOLD:
             logger.critical(f"[{key}] 已連續失敗 {fail_count} 次，需人工檢查 selector 是否因改版失效")
@@ -212,6 +215,8 @@ def run_source(key: str):
     if report.rejected:
         logger.warning(f"[{key}] PARTIAL: rejected={report.rejected} errors={report.errors[:3]}")
         _record_summary(key, how, f"PARTIAL rejected={report.rejected}")
+    health_status = "PARTIAL" if report.rejected else ("EMPTY_VALID" if not raw_items else "SUCCESS")
+    record_source_health(SOURCE_HEALTH_PATH, source_id, health_status, item_count=len(raw_items), rejected_count=report.rejected)
     db.record_fetch_success(source_id)
 
     if not raw_items:

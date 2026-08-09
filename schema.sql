@@ -49,6 +49,20 @@ CREATE TABLE IF NOT EXISTS delivery_log (
 CREATE INDEX IF NOT EXISTS idx_item_source ON item(source_id);
 CREATE INDEX IF NOT EXISTS idx_item_status ON item(status);
 
+CREATE TABLE IF NOT EXISTS link_health (
+    item_id TEXT PRIMARY KEY REFERENCES item(item_id),
+    original_url TEXT NOT NULL,
+    resolved_url TEXT,
+    link_status TEXT NOT NULL,
+    checked_at TEXT NOT NULL,
+    http_status INTEGER,
+    consecutive_failures INTEGER NOT NULL DEFAULT 0,
+    error_message TEXT,
+    replacement_reason TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_link_health_status ON link_health(link_status);
+
 -- 模擬持倉(使用者確認2026-07-30)：3個獨立紙上帳戶,不是真實交易,純模擬
 -- 追蹤+每日策略記錄。台股1000元、幣圈(合約限定)100u、幣圈(自主判斷)100u。
 CREATE TABLE IF NOT EXISTS portfolio (

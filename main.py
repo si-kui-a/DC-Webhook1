@@ -188,6 +188,8 @@ def run_source(key: str):
 
     fetch_fn, webhook_env, source_name, source_id = SOURCE_REGISTRY[key]
     webhook_url = os.getenv(webhook_env)
+    if key == "rental_search" and not webhook_url:
+        webhook_url = os.getenv("WEBHOOK_HOUSE_591")
     if not webhook_url:
         logger.error(f"缺少環境變數 {webhook_env}，跳過 {key}")
         _record_summary(key, how, f"失敗，缺少環境變數 {webhook_env}")
@@ -1025,6 +1027,8 @@ def run_digest_channel(key: str):
         return
 
     webhook_url = os.getenv(webhook_env)
+    if key == "rental_search" and not webhook_url:
+        webhook_url = os.getenv("WEBHOOK_HOUSE_591")
     if not webhook_url:
         logger.error("[%s] 缺少環境變數 %s，跳過", key, webhook_env)
         return
@@ -1748,7 +1752,7 @@ def main():
         # 省略，見各自docstring既有容錯設計)，twse_tsmc/twse_chunghwa/fed
         # 本來就是Daily，統一每天執行不影響功能，順便省掉平日/每日兩種
         # 排程頻率的差異。
-        for key in ("fed", "etf0050", "macro_fred", "twse_tsmc", "twse_chunghwa"):
+        for key in ("fed", "etf0050", "macro_fred", "twse_tsmc", "twse_chunghwa", "rental_search"):
             # run_source()本身已有完整try/except(既有設計)，這裡再包一層
             # 純粹是跟--digest-all/--meta-all維持同一種批次防護風格一致。
             try:

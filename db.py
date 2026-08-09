@@ -451,3 +451,31 @@ def set_portfolio_trigger(portfolio_id: str, price_triggers: str, news_keywords:
     )
     conn.commit()
     conn.close()
+
+
+def upsert_link_health(item_id: str, original_url: str, resolved_url: str | None,
+                       link_status: str, http_status: int | None = None,
+                       error_message: str | None = None,
+                       replacement_reason: str | None = None) -> None:
+    """Record link lifecycle without changing the item URL or dedup key."""
+    conn = get_conn()
+    previous = conn.execute(
+        "SELECT consecutive_failures FROM link_health WHERE item_id=?", (item_id,)
+    ).fetchone()
+    failures = 0 if link_status in {"OK", "REDIRECTED", "REPLACED"} else ((previous[0] if previous else 0) + 1)
+    conn.execute(
+        """INSERT INTO link_health
+           (item_id, original_url, resolved_url, link_status, checked_at, http_status,
+            consecutive_failures, error_message, replacement_reason)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+           ON CONFLICT(item_id) DO UPDATE SET
+             resolved_url=excluded.resolved_url, link_status=excluded.link_status,
+             checked_at=excluded.checked_at, http_status=excluded.http_status,
+             consecutive_failures=excluded.consecutive_failures,
+             error_message=excluded.error_message, replacement_reason=excluded.replacement_reason""",
+        (item_id, original_url, resolved_url, link_status,
+         datetime.now(timezone.utc).isoformat(), http_status, failures,
+         error_message, replacement_reason),
+    )
+    conn.commit()
+    conn.close()

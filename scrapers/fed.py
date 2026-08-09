@@ -15,7 +15,7 @@ scrapers/fed.py — 美國聯準會（Fed）FOMC 新聞稿。
 """
 from datetime import date
 
-import requests
+from scrapers import http_client
 from bs4 import BeautifulSoup
 
 SOURCE_ID = "fed.fomc_press"
@@ -29,7 +29,7 @@ HEADERS = {
 
 def fetch() -> list[dict]:
     url = BASE_URL_TEMPLATE.format(year=date.today().year)
-    resp = requests.get(url, headers=HEADERS, timeout=15)
+    resp = http_client.get(url, headers=HEADERS, timeout=15)
     resp.raise_for_status()
     soup = BeautifulSoup(resp.text, "html.parser")
 
@@ -62,7 +62,7 @@ def fetch_detail_text(url: str) -> str:
     <p> 段落。用 :not(.heading) 排除第一個，避免抓到分享連結、社群按鈕
     等雜訊文字混進摘要。
     """
-    resp = requests.get(url, headers=HEADERS, timeout=15)
+    resp = http_client.get(url, headers=HEADERS, timeout=15)
     resp.raise_for_status()
     soup = BeautifulSoup(resp.text, "html.parser")
 

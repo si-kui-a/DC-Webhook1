@@ -158,7 +158,7 @@ def _parse_response(response, source_url: str) -> list[dict]:
         return _parse_xml(response.text, source_url)
     return _parse_html(response.text, source_url)
 def _matches(item: dict, *, areas: list[str], keywords: list[str], excludes: list[str],
-             max_rent: float | None, min_size: float | None) -> bool:
+             max_rent: float | None, min_rent: float | None, room_types: list[str], min_size: float | None) -> bool:
     haystack = " ".join(str(item.get(key) or "") for key in ("title", "summary", "location", "room_type")).lower()
     if areas and not any(area.lower() in haystack for area in areas):
         return False
@@ -167,7 +167,11 @@ def _matches(item: dict, *, areas: list[str], keywords: list[str], excludes: lis
     if excludes and any(word.lower() in haystack for word in excludes):
         return False
     rent = item.get("rent_monthly")
-    if max_rent is not None and rent is not None and rent > max_rent:
+    if min_rent is not None and (rent is None or rent < min_rent):
+        return False
+    if max_rent is not None and (rent is None or rent > max_rent):
+        return False
+    if room_types and not any(room.lower() in haystack for room in room_types):
         return False
     size = item.get("size_ping")
     if min_size is not None and (size is None or size < min_size):
@@ -177,7 +181,8 @@ def _matches(item: dict, *, areas: list[str], keywords: list[str], excludes: lis
 
 def fetch(*, urls: list[str] | None = None, session=None, areas: list[str] | None = None,
           keywords: list[str] | None = None, excludes: list[str] | None = None,
-          max_rent: float | None = None, min_size: float | None = None) -> list[dict]:
+          max_rent: float | None = None, min_rent: float | None = None,
+          room_types: list[str] | None = None, min_size: float | None = None) -> list[dict]:
     """Fetch explicitly configured feeds and return normalized, filtered items."""
     urls = urls or _csv_env("RENTAL_FEED_URLS")
     if not urls:
@@ -186,6 +191,8 @@ def fetch(*, urls: list[str] | None = None, session=None, areas: list[str] | Non
     keywords = _csv_env("RENTAL_KEYWORDS") if keywords is None else keywords
     excludes = _csv_env("RENTAL_EXCLUDE") if excludes is None else excludes
     max_rent = _number(os.getenv("RENTAL_MAX_MONTHLY")) if max_rent is None else max_rent
+    min_rent = _number(os.getenv("RENTAL_MIN_MONTHLY")) if min_rent is None else min_rent
+    room_types = _csv_env("RENTAL_ROOM_TYPES") if room_types is None else room_types
     min_size = _number(os.getenv("RENTAL_MIN_PING")) if min_size is None else min_size
     output = []
     seen = set()
@@ -196,7 +203,7 @@ def fetch(*, urls: list[str] | None = None, session=None, areas: list[str] | Non
         except (ValueError, ET.ParseError, OSError, zipfile.BadZipFile):
             rows = []
         for item in rows:
-            if item and _matches(item, areas=areas, keywords=keywords, excludes=excludes, max_rent=max_rent, min_size=min_size):
+            if item and _matches(item, areas=areas, keywords=keywords, excludes=excludes, max_rent=max_rent, min_rent=min_rent, room_types=room_types, min_size=min_size):
                 key = item["url"].split("#", 1)[0].rstrip("/").lower()
                 if key not in seen:
                     seen.add(key)

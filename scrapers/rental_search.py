@@ -7,6 +7,8 @@ before it reaches the common item contract.
 """
 from __future__ import annotations
 
+import csv
+import io
 import json
 import os
 import re
@@ -119,6 +121,42 @@ def _parse_html(text: str, source_url: str) -> list[dict]:
     return rows
 
 
+
+def _parse_csv(text: str, source_url: str) -> list[dict]:
+    """Parse government/open CSV exports with Chinese or English headers."""
+    rows = []
+    reader = csv.DictReader(io.StringIO(text.lstrip("\ufeff")))
+    for row in reader:
+        normalized = {
+            "title": _first(row, "交易標的", "建物型態", "租賃標的", "title") or "租賃實價資料",
+            "url": _first(row, "url", "網址", "link") or source_url,
+            "location": " ".join(str(_first(row, key) or "") for key in ("縣市", "鄉鎮市區", "土地位置建物門牌", "location")),
+            "rent": _first(row, "租金總額(元)", "租賃總價(元)", "每月租金", "rent", "price"),
+            "size": _first(row, "建物租賃總面積平方公尺", "建物租賃面積(平方公尺)", "建物面積", "size_ping"),
+            "published_at": _first(row, "交易年月日", "租賃日期", "date"),
+            "description": "；".join(f"{key}:{value}" for key, value in row.items() if value and key not in {"url", "link"}),
+        }
+        item = _normalize(normalized, source_url, source_url)
+        if item:
+            rows.append(item)
+    return rows
+
+
+def _parse_response(response, source_url: str) -> list[dict]:
+    content_type = response.headers.get("Content-Type", "").lower()
+    raw_content = getattr(response, "content", b"")
+    payload = raw_content if isinstance(raw_content, (bytes, bytearray)) else response.text.encode("utf-8", errors="ignore")
+    if "zip" in content_type or payload[:2] == b"PK":
+        with zipfile.ZipFile(io.BytesIO(payload)) as archive:
+            names = [name for name in archive.namelist() if name.lower().endswith((".csv", ".txt"))]
+            return _parse_csv(archive.read(names[0]).decode("utf-8-sig", errors="replace"), source_url) if names else []
+    if "csv" in content_type or source_url.lower().endswith((".csv", ".txt")):
+        return _parse_csv(response.text, source_url)
+    if "json" in content_type or source_url.lower().endswith(".json"):
+        return [_normalize(row, source_url, source_url) for row in _json_rows(response.json())]
+    if "xml" in content_type or "rss" in content_type or "atom" in content_type or response.text.lstrip().startswith("<rss"):
+        return _parse_xml(response.text, source_url)
+    return _parse_html(response.text, source_url)
 def _matches(item: dict, *, areas: list[str], keywords: list[str], excludes: list[str],
              max_rent: float | None, min_size: float | None) -> bool:
     haystack = " ".join(str(item.get(key) or "") for key in ("title", "summary", "location", "room_type")).lower()
@@ -153,15 +191,9 @@ def fetch(*, urls: list[str] | None = None, session=None, areas: list[str] | Non
     seen = set()
     for source_url in urls:
         response = get(source_url, session=session, headers={"Accept": "application/rss+xml, application/json, text/html"})
-        content_type = response.headers.get("Content-Type", "").lower()
         try:
-            if "json" in content_type or source_url.lower().endswith(".json"):
-                rows = [_normalize(row, source_url, source_url) for row in _json_rows(response.json())]
-            elif "xml" in content_type or "rss" in content_type or "atom" in content_type or response.text.lstrip().startswith("<rss"):
-                rows = _parse_xml(response.text, source_url)
-            else:
-                rows = _parse_html(response.text, source_url)
-        except (ValueError, ET.ParseError):
+            rows = _parse_response(response, source_url)
+        except (ValueError, ET.ParseError, OSError, zipfile.BadZipFile):
             rows = []
         for item in rows:
             if item and _matches(item, areas=areas, keywords=keywords, excludes=excludes, max_rent=max_rent, min_size=min_size):

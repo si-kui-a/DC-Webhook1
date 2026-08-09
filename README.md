@@ -122,3 +122,5 @@ intel-pusher/
 �]�w `WEBHOOK_RENTAL_SEARCH` ����� `python main.py --source rental_search`�F���]�w�ӷ��ɷ|�w���a�O�������t�m�A���|������������C
 
 來源目錄另收錄臺北市、新北市政府開放資料、國家住宅及都市更新中心與新北住都中心公告；各來源先經 PENDING_REVIEW，確認實際下載端點與欄位後才啟用。
+
+租屋目標設定：`config/RENTAL_SEARCH_PROFILE.yaml` 固定以東海大學為錨點、30 分鐘大眾運輸為上限；沒有來源通勤時間時只做站點初篩並標示需複核。

@@ -1,0 +1,20 @@
+﻿version: 1
+anchor:
+  name: 東海大學
+  address: 台中市西屯區臺灣大道四段1727號
+  max_transit_minutes: 30
+  verification: required
+candidate_stops:
+  - 東海大學
+  - 台中榮總
+  - 台中捐血中心
+  - 中港轉運站
+  - 朝馬轉運站
+routes_reference:
+  - 300-310
+  - 161
+  - 677
+notes:
+  - 來源有 transit_minutes 時，必須 <= max_transit_minutes 才能自動通過。
+  - 來源沒有 transit_minutes 時，只能依 candidate_stops/地區初篩，推播標記「需路線複核」。
+  - 到站時間與轉乘應以臺中市公車動態暨路網轉乘系統重新查核。

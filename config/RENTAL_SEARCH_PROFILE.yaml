@@ -28,3 +28,10 @@ housing:
     - 套房
     - 獨立套房
   note: 女性/學生友善須以房源明確標示或聯絡確認，不自動推定。
+subsidy:
+  target_basis: rent_after_subsidy
+  min_effective_monthly: 3000
+  max_effective_monthly: 4500
+  preferred_effective_max_monthly: 4000
+  explicit_amount_required_for_confirmation: true
+  note: 未提供租補金額的房源只列為補助待核，不宣稱符合。

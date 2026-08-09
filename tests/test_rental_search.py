@@ -54,3 +54,13 @@ def test_explicit_male_only_listing_is_excluded():
     with patch("scrapers.rental_search.get", return_value=response(body, "application/json")):
         items = fetch(urls=["https://rent.example/feed.json"], areas=["台中"], min_rent=3000, max_rent=4500, room_types=["套房"])
     assert [item["url"] for item in items] == ["https://rent.example/open"]
+
+def test_subsidy_after_rent_is_used_for_budget():
+    body = json.dumps({"results": [
+        {"title": "套房 補助後", "url": "https://rent.example/subsidy", "rent": 8500, "subsidy": 4500, "location": "台中西屯"},
+        {"title": "套房 未知補助", "url": "https://rent.example/unknown", "rent": 8500, "location": "台中西屯"},
+    ]})
+    with patch("scrapers.rental_search.get", return_value=response(body, "application/json")):
+        items = fetch(urls=["https://rent.example/feed.json"], areas=["台中"], min_rent=3000, max_rent=4500, room_types=["套房"])
+    assert [item["url"] for item in items] == ["https://rent.example/subsidy"]
+    assert items[0]["rent_after_subsidy"] == 4000

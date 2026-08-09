@@ -12,6 +12,7 @@ import io
 import json
 import os
 import re
+import zipfile
 import xml.etree.ElementTree as ET
 from datetime import datetime
 from email.utils import parsedate_to_datetime
@@ -83,6 +84,7 @@ def _normalize(row: dict, base_url: str, source_url: str) -> dict | None:
     summary = str(_first(row, "summary", "description", "content", "text") or "").strip()
     location = str(_first(row, "location", "address", "area", "district") or "").strip()
     rent = _number(_first(row, "rent", "price", "monthly_rent", "月租"))
+    subsidy = _number(_first(row, "subsidy", "rent_subsidy", "monthly_subsidy"))
     size = _number(_first(row, "size", "size_ping", "area_ping", "ping", "坪數"))
     item = {
         "title": title,
@@ -92,6 +94,9 @@ def _normalize(row: dict, base_url: str, source_url: str) -> dict | None:
         "source_url": source_url,
         "location": location or None,
         "rent_monthly": rent,
+        "subsidy_monthly": subsidy,
+        "rent_after_subsidy": (rent - subsidy) if rent is not None and subsidy is not None else None,
+        "subsidy_status": "EXPLICIT" if subsidy is not None else "REVIEW_REQUIRED",
         "size_ping": size,
         "room_type": str(_first(row, "room_type", "layout", "rooms", "格局") or "").strip() or None,
     }
@@ -169,7 +174,7 @@ def _matches(item: dict, *, areas: list[str], keywords: list[str], excludes: lis
         return False
     if any(term.lower() in haystack for term in MALE_ONLY_TERMS):
         return False
-    rent = item.get("rent_monthly")
+    rent = item.get("rent_after_subsidy") if item.get("rent_after_subsidy") is not None else item.get("rent_monthly")
     if min_rent is not None and (rent is None or rent < min_rent):
         return False
     if max_rent is not None and (rent is None or rent > max_rent):

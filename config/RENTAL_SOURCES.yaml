@@ -1,0 +1,26 @@
+﻿version: 1
+# 僅自動化明確授權或政府開放資料；商業站點需書面 API/資料授權。
+sources:
+  - source_id: moi.rental_transactions
+    name: 內政部不動產租賃實價登錄批次資料
+    kind: csv_zip
+    endpoint: https://data.moi.gov.tw/MoiOD/System/DownloadFile.aspx?DATA=F85D101E-1453-49B2-892D-36234CF9303D
+    license: 政府資料開放授權條款-第1版
+    refresh: daily
+    status: PENDING_REVIEW
+  - source_id: 591.rentals
+    name: 591 租屋網
+    kind: html
+    endpoint: https://rent.591.com.tw/
+    status: BLOCKED_NO_AUTHORIZATION
+    note: 服務條款禁止未經明確授權之連續自動爬取
+  - source_id: rakuya.rentals
+    name: 樂屋網租屋
+    kind: html
+    endpoint: https://www.rakuya.com.tw/rent
+    status: PENDING_AUTHORIZATION
+  - source_id: sinyi.rentals
+    name: 信義房屋租屋
+    kind: html
+    endpoint: https://www.sinyi.com.tw/rent
+    status: PENDING_AUTHORIZATION

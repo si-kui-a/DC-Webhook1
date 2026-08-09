@@ -85,6 +85,8 @@ def _normalize(row: dict, base_url: str, source_url: str) -> dict | None:
     location = str(_first(row, "location", "address", "area", "district") or "").strip()
     rent = _number(_first(row, "rent", "price", "monthly_rent", "月租"))
     subsidy = _number(_first(row, "subsidy", "rent_subsidy", "monthly_subsidy"))
+    cooking_text = str(_first(row, "cooking", "kitchen", "cooking_allowed", "開伙", "可開伙") or "").strip()
+    cooking_allowed = False if any(term in cooking_text for term in ("不可開伙", "禁炊", "不可煮")) else (True if any(term in cooking_text for term in ("可開伙", "可炊", "可煮")) else None)
     size = _number(_first(row, "size", "size_ping", "area_ping", "ping", "坪數"))
     item = {
         "title": title,
@@ -97,6 +99,8 @@ def _normalize(row: dict, base_url: str, source_url: str) -> dict | None:
         "subsidy_monthly": subsidy,
         "rent_after_subsidy": (rent - subsidy) if rent is not None and subsidy is not None else None,
         "subsidy_status": "EXPLICIT" if subsidy is not None else "REVIEW_REQUIRED",
+        "cooking_allowed": cooking_allowed,
+        "cooking_status": cooking_text or "REVIEW_REQUIRED",
         "size_ping": size,
         "room_type": str(_first(row, "room_type", "layout", "rooms", "格局") or "").strip() or None,
     }
@@ -216,5 +220,7 @@ def fetch(*, urls: list[str] | None = None, session=None, areas: list[str] | Non
                 if key not in seen:
                     seen.add(key)
                     output.append(item)
+    if os.getenv("RENTAL_COOKING_PREFERENCE", "prefer").lower() == "prefer":
+        output.sort(key=lambda item: 0 if item.get("cooking_allowed") is True else 1)
     return output
 

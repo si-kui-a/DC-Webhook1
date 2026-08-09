@@ -47,6 +47,7 @@ import summarizer_zh
 import notify_telegram
 from push_webhook import build_embed, send_webhook
 from scrapers import tsmc, fed, cbc, etf0050, macro_fred, twse_financials
+from scrapers.contracts import validate_items
 from scrapers import substack_generic
 from scrapers import semi_supply_chain
 import digest_format
@@ -206,6 +207,11 @@ def run_source(key: str):
         _record_summary(key, how, f"例外失敗（累計{fail_count}次），完整 traceback 見 work/error.log")
         return
 
+    report = validate_items(raw_items)
+    raw_items = report.accepted
+    if report.rejected:
+        logger.warning(f"[{key}] PARTIAL: rejected={report.rejected} errors={report.errors[:3]}")
+        _record_summary(key, how, f"PARTIAL rejected={report.rejected}")
     db.record_fetch_success(source_id)
 
     if not raw_items:

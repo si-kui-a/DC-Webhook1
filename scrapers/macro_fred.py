@@ -38,6 +38,7 @@ title含日期,確保每天自然產生新的dedup_key(沿用etf0050.py的既有
 from datetime import date
 
 import requests
+from scrapers import http_client
 
 SOURCE_ID = "fred.macro_indicators"
 SOURCE_NAME = "總經指標追蹤"
@@ -88,7 +89,7 @@ def _fetch_series(series_id: str) -> list[tuple[str, float]]:
     """回傳(日期,數值)列表,依日期由舊到新排序,已過濾缺值(FRED以'.'表示,
     通常是假日/資料延遲)。"""
     url = FRED_CSV_URL.format(series_id=series_id)
-    resp = requests.get(url, headers=HEADERS, timeout=15)
+    resp = http_client.get(url, headers=HEADERS, timeout=15)
     resp.raise_for_status()
     lines = resp.text.strip().splitlines()
     rows = []
@@ -133,7 +134,7 @@ def _fetch_margin_balance(date_str: str) -> dict | None:
     變動(仟元)}。非交易日/抓取失敗回傳None,不影響其餘總經指標照常顯示。"""
     url = MARGIN_URL.format(date=date_str)
     try:
-        resp = requests.get(url, headers=HEADERS, timeout=15)
+        resp = http_client.get(url, headers=HEADERS, timeout=15)
         resp.raise_for_status()
         data = resp.json()
     except (requests.RequestException, ValueError):

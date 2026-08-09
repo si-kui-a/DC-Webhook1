@@ -17,6 +17,7 @@ title+url機制,title用「公司+期別」組成,同一期別只會被推播一
 from datetime import date
 
 import requests
+from scrapers import http_client
 
 REVENUE_URL = "https://openapi.twse.com.tw/v1/opendata/t187ap05_L"
 INCOME_URL = "https://openapi.twse.com.tw/v1/opendata/t187ap06_L_ci"
@@ -31,7 +32,7 @@ HEADERS = {
 
 
 def _fetch_json(url: str) -> list[dict]:
-    resp = requests.get(url, headers=HEADERS, timeout=20)
+    resp = http_client.get(url, headers=HEADERS, timeout=20)
     resp.raise_for_status()
     return resp.json()
 

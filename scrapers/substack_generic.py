@@ -17,6 +17,7 @@ import xml.etree.ElementTree as ET
 from html import unescape
 
 import requests
+from scrapers import http_client
 
 _CONTENT_ENCODED_TAG = "{http://purl.org/rss/1.0/modules/content/}encoded"
 
@@ -88,7 +89,7 @@ def _extract_free_preview(raw_html: str) -> str:
 def fetch_feed(source_id: str, source_name: str, feed_url: str) -> list[dict]:
     """抓單一Substack feed,回傳每篇文章的標題+免費預覽+連結。單篇解析
     失敗不中斷其他項目(比照既有scraper的容錯原則)。"""
-    resp = requests.get(feed_url, headers=HEADERS, timeout=15)
+    resp = http_client.get(feed_url, headers=HEADERS, timeout=15)
     resp.raise_for_status()
     root = ET.fromstring(resp.content)
 

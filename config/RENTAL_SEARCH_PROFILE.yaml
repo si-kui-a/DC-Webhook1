@@ -18,3 +18,13 @@ notes:
   - 來源有 transit_minutes 時，必須 <= max_transit_minutes 才能自動通過。
   - 來源沒有 transit_minutes 時，只能依 candidate_stops/地區初篩，推播標記「需路線複核」。
   - 到站時間與轉乘應以臺中市公車動態暨路網轉乘系統重新查核。
+rent:
+  min_monthly: 3000
+  max_monthly: 4500
+  preferred_max_monthly: 4000
+housing:
+  target: female_student
+  preferred_room_types:
+    - 套房
+    - 獨立套房
+  note: 女性/學生友善須以房源明確標示或聯絡確認，不自動推定。

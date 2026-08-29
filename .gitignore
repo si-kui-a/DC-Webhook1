@@ -12,7 +12,9 @@ academic_progress.md
 my_resume.json
 
 logs/*.log
+logs/runs/
 work/*.log
+work/source_health.json
 
 # old scaffold kept for reference only, never committed
 _scaffold_backup/

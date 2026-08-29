@@ -17,8 +17,10 @@ numpy>=2.0
 scipy>=1.14
 networkx>=3.0
 
-# ai_insight.py（fed/tsmc中文翻譯+利多利空判斷）純用requests呼叫Gemini
-# API，不需要額外套件，見上方requests>=2.31。
+# ai_insight.py（fed/tsmc中文翻譯+利多利空判斷、頻道彙整、大總結）純用
+# urllib呼叫Gemini API，不需要額外套件。非交易用途另有選填GPT備援
+# (OPENAI_API_KEY/OPENAI_MODEL，見ai_insight.py _call_ai_json_text)，
+# 同樣純urllib，不新增依賴；build_trade_decision刻意不接此備援。
 
 # resume_matcher.py（履歷配對/AI修改建議）：解析使用者上傳的履歷檔案
 pypdf>=6.0

@@ -45,6 +45,87 @@ def _with_retry(fn):
     raise last_exc  # pragma: no cover
 
 
+# ── GPT備援(僅供非交易用途:翻譯/情緒判斷、頻道彙整、大總結) ──────────────
+# build_trade_decision()刻意不套用這一段,交易判斷AI失敗時維持既有「這次
+# 先不動作」邏輯,不接GPT備援(2026-08-29交接指令的安全邊界)。
+def _call_gemini_json_text(prompt: str, temperature: float, timeout: int) -> str:
+    """呼叫Gemini generateContent,回傳AI原始回應文字(未parse JSON)。
+    失敗時原樣往外拋(HTTPError/URLError等),不吞例外,由_call_ai_json_text
+    決定要不要切GPT。"""
+    api_key = os.getenv("GEMINI_API_KEY", "")
+    url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent"
+    body = json.dumps({
+        "contents": [{"role": "user", "parts": [{"text": prompt}]}],
+        "generationConfig": {"temperature": temperature, "responseMimeType": "application/json"},
+    }).encode("utf-8")
+    req = urllib.request.Request(
+        url, data=body,
+        headers={"Content-Type": "application/json", "x-goog-api-key": api_key},
+        method="POST",
+    )
+
+    def _do():
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            return json.loads(resp.read().decode("utf-8"))
+
+    data = _with_retry(_do)
+    return data["candidates"][0]["content"]["parts"][0]["text"]
+
+
+def _call_openai_json_text(prompt: str, temperature: float, timeout: int) -> str:
+    """OPENAI_API_KEY為選填備援金鑰,只在Gemini失敗且此鍵有設定時才會被呼叫
+    (見_call_ai_json_text)。未設定時由呼叫端判斷略過,不強制使用者設定。"""
+    api_key = os.getenv("OPENAI_API_KEY", "")
+    if not api_key:
+        raise RuntimeError("OPENAI_API_KEY 未設定")
+    model = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+    url = "https://api.openai.com/v1/chat/completions"
+    body = json.dumps({
+        "model": model,
+        "messages": [{"role": "user", "content": prompt}],
+        "temperature": temperature,
+        "response_format": {"type": "json_object"},
+    }).encode("utf-8")
+    req = urllib.request.Request(
+        url, data=body,
+        headers={"Content-Type": "application/json", "Authorization": "Bearer %s" % api_key},
+        method="POST",
+    )
+
+    def _do():
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            return json.loads(resp.read().decode("utf-8"))
+
+    data = _with_retry(_do)
+    return data["choices"][0]["message"]["content"]
+
+
+def _is_failover_eligible(exc: Exception) -> bool:
+    """只在429/5xx/網路錯誤/金鑰被拒(401/403)時才允許切GPT,4xx其他情況
+    (如400請求格式問題)、JSON解析失敗等內容面問題不切——重試/切供應商
+    都不會讓這類問題變好,不因單純品質疑慮就無限制切換供應商。"""
+    if isinstance(exc, urllib.error.HTTPError):
+        return exc.code in (401, 403, 429, 500, 502, 503, 504)
+    if isinstance(exc, urllib.error.URLError):
+        return True
+    return False
+
+
+def _call_ai_json_text(prompt: str, temperature: float, timeout: int) -> str:
+    """Gemini為主要供應商,失敗且符合_is_failover_eligible、且設有
+    OPENAI_API_KEY時才改呼叫GPT當第二順位。GPT也失敗時,往外拋Gemini的
+    原始例外,呼叫端既有的except Exception記錄邏輯不用改。"""
+    try:
+        return _call_gemini_json_text(prompt, temperature, timeout)
+    except Exception as primary_exc:
+        if not _is_failover_eligible(primary_exc) or not os.getenv("OPENAI_API_KEY"):
+            raise
+        try:
+            return _call_openai_json_text(prompt, temperature, timeout)
+        except Exception:
+            raise primary_exc
+
+
 def get_translation_and_sentiment(english_summary: str) -> dict | None:
     """
     輸入已由summarizer_en.py抽取式摘要出的英文重點句(LexRank已挑出3句內、
@@ -68,24 +149,8 @@ def get_translation_and_sentiment(english_summary: str) -> dict | None:
         '只回傳JSON,格式:{"zh_summary": "...", "sentiment": "...", "sentiment_reason": "..."}\n\n'
         "重點句:\n" + english_summary
     )
-    url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent"
-    body = json.dumps({
-        "contents": [{"role": "user", "parts": [{"text": prompt}]}],
-        "generationConfig": {"temperature": 0.2, "responseMimeType": "application/json"},
-    }).encode("utf-8")
-    req = urllib.request.Request(
-        url, data=body,
-        headers={"Content-Type": "application/json", "x-goog-api-key": api_key},
-        method="POST",
-    )
-
-    def _do():
-        with urllib.request.urlopen(req, timeout=TIMEOUT_SECONDS) as resp:
-            return json.loads(resp.read().decode("utf-8"))
-
     try:
-        data = _with_retry(_do)
-        text = data["candidates"][0]["content"]["parts"][0]["text"]
+        text = _call_ai_json_text(prompt, temperature=0.2, timeout=TIMEOUT_SECONDS)
         parsed = json.loads(text)
         if parsed.get("sentiment") not in ALLOWED_SENTIMENTS:
             logger.warning(f"gemini回傳不合法的sentiment: {parsed.get('sentiment')!r}")
@@ -156,24 +221,8 @@ def build_channel_digest(channel_angle: str, items: list[dict]) -> dict | None:
         '"source_url":"..."}]}'
     )
 
-    url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent"
-    body = json.dumps({
-        "contents": [{"role": "user", "parts": [{"text": prompt}]}],
-        "generationConfig": {"temperature": 0.3, "responseMimeType": "application/json"},
-    }).encode("utf-8")
-    req = urllib.request.Request(
-        url, data=body,
-        headers={"Content-Type": "application/json", "x-goog-api-key": api_key},
-        method="POST",
-    )
-
-    def _do():
-        with urllib.request.urlopen(req, timeout=DIGEST_TIMEOUT_SECONDS) as resp:
-            return json.loads(resp.read().decode("utf-8"))
-
     try:
-        data = _with_retry(_do)
-        text = data["candidates"][0]["content"]["parts"][0]["text"]
+        text = _call_ai_json_text(prompt, temperature=0.3, timeout=DIGEST_TIMEOUT_SECONDS)
         parsed = json.loads(text)
         overview = str(parsed.get("overview", "")).strip()
         raw_points = parsed.get("points", [])
@@ -252,24 +301,8 @@ def build_meta_summary(angle: str, channel_reports: list[dict]) -> dict | None:
         '"source_url":""}]}'
     )
 
-    url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent"
-    body = json.dumps({
-        "contents": [{"role": "user", "parts": [{"text": prompt}]}],
-        "generationConfig": {"temperature": 0.3, "responseMimeType": "application/json"},
-    }).encode("utf-8")
-    req = urllib.request.Request(
-        url, data=body,
-        headers={"Content-Type": "application/json", "x-goog-api-key": api_key},
-        method="POST",
-    )
-
-    def _do():
-        with urllib.request.urlopen(req, timeout=DIGEST_TIMEOUT_SECONDS) as resp:
-            return json.loads(resp.read().decode("utf-8"))
-
     try:
-        data = _with_retry(_do)
-        text = data["candidates"][0]["content"]["parts"][0]["text"]
+        text = _call_ai_json_text(prompt, temperature=0.3, timeout=DIGEST_TIMEOUT_SECONDS)
         parsed = json.loads(text)
         overview = str(parsed.get("overview", "")).strip()
         raw_points = parsed.get("points", [])

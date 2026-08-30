@@ -66,6 +66,24 @@ def transcribe(wav_path: str | Path) -> str:
     return _cc.convert(raw_text)
 
 
+def transcribe_segments(wav_path: str | Path) -> list[dict]:
+    """跟transcribe()同一套模型設定，但保留每段的start/end時間戳(2026-08-05
+    新增，video_digest.py用——重點時刻要能對應回影片畫面，純文字版本
+    (transcribe())拿掉時間戳是刻意的，這裡不能重用那份、只能另開一支)。
+    回傳 [{"start": 秒, "end": 秒, "text": 繁體中文}, ...]。"""
+    model = _get_model()
+    segments, _info = model.transcribe(
+        str(wav_path),
+        language="zh",
+        vad_filter=True,
+    )
+    return [
+        {"start": seg.start, "end": seg.end, "text": _cc.convert(seg.text.strip())}
+        for seg in segments
+        if seg.text.strip()
+    ]
+
+
 if __name__ == "__main__":
     if len(sys.argv) != 2:
         print("用法：python transcribe.py <wav檔路徑>", file=sys.stderr)

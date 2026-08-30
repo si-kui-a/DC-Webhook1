@@ -27,3 +27,7 @@ scipy>=1.14
 # 推播到Discord(沿用ip既有DISCORD_BOT_TOKEN)
 requests>=2.31
 python-dotenv>=1.0
+
+# video_digest.py(2026-08-05新增)：逐字稿+摘要+截圖排版成PDF。純Python，
+# 免系統原生依賴(weasyprint這類需要GTK/cairo的套件在Windows上常裝不起來)
+fpdf2>=2.7

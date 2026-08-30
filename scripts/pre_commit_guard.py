@@ -42,8 +42,11 @@ def check_not_main_branch() -> bool:
 
 
 def check_ps1_bom() -> bool:
+    # core.quotePath=false: git預設會把非ASCII檔名(如中文)octal-escape並包
+    # 引號輸出,下面逐行比對會整段比對失敗(2026-08-30在local-kit-source的
+    # CI Linux runner上發現，見si-kui-a/local-kit-source#2)。
     result = subprocess.run(
-        ["git", "diff", "--cached", "--name-only", "--diff-filter=ACM"],
+        ["git", "-c", "core.quotePath=false", "diff", "--cached", "--name-only", "--diff-filter=ACM"],
         capture_output=True, text=True, encoding="utf-8"
     )
     ok = True
@@ -63,7 +66,7 @@ def check_ps1_bom() -> bool:
 
 def check_no_secret_files() -> bool:
     result = subprocess.run(
-        ["git", "diff", "--cached", "--name-only", "--diff-filter=ACM"],
+        ["git", "-c", "core.quotePath=false", "diff", "--cached", "--name-only", "--diff-filter=ACM"],
         capture_output=True, text=True, encoding="utf-8"
     )
     ok = True

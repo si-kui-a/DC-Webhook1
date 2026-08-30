@@ -22,6 +22,16 @@ Meta_Dev_Knowledge.md 記錄所有已踩過的坑/設計決策，改動前先查
 改。不進CI，累積多輪修改後或懷疑文件過時時手動觸發即可，不用每次
 commit都跑。
 
+**★2026-08-30訂為閥值自動觸發★收工時先跑這行判斷要不要做健檢，不用
+自己記或等使用者提醒**：
+```bash
+git rev-list --count $(head -c 7 scripts/.last-audit-marker)..HEAD
+```
+（**這個檔案不存在**時上面這行會直接報錯——代表從沒跑過健檢，視同
+數字已達閥值，直接跑健檢腳本並用結果建立這個檔案，不用回頭修這行
+指令）**這個數字≥8就自動跑**`python scripts/dev_knowledge_audit.py`，
+跑完後用當下HEAD的short SHA+日期覆寫`scripts/.last-audit-marker`。
+
 ## Env
 - .env 存放全部Discord webhook/GEMINI_API_KEY/DISCORD_BOT_TOKEN，AI一律不讀，只讀.env.example
 - data.db 為SQLite主資料庫，不進版控

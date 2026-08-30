@@ -59,6 +59,71 @@ def invalidate_cache():
     scholarship_util.invalidate_cache()  # 學校/年級/國籍/身份別排除共用同一份profile
 
 
+DEFAULT_KEYWORD_WEIGHT = 2  # 「關鍵字：<詞>」沒給權重時的預設值，比照threshold(2)/實習二字既有權重
+
+
+def _read_raw_config() -> dict:
+    """讀取設定檔原始內容(不經cache)，供寫入前的read-modify-write使用。
+    檔案不存在時回傳_DEFAULT_KEYWORDS的複本(不能直接回傳原物件，寫入時
+    會意外修改到module-level常數)。"""
+    if os.path.exists(_KEYWORDS_PATH):
+        with open(_KEYWORDS_PATH, encoding="utf-8") as f:
+            return json.load(f)
+    return json.loads(json.dumps(_DEFAULT_KEYWORDS))
+
+
+def _write_raw_config(data: dict) -> None:
+    """寫回設定檔，保留_comment*欄位與中文可讀性(ensure_ascii=False)——
+    2026-08-01設計定案，見resume_bot.py Discord指令的呼叫端。寫入後
+    呼叫端(resume_bot.py)自行呼叫invalidate_cache()，這裡不主動呼叫，
+    避免這支純I/O函式意外耦合scholarship_util的cache。"""
+    with open(_KEYWORDS_PATH, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+        f.write("\n")
+
+
+def add_exclude_keyword(word: str) -> None:
+    """「排除：<詞>」——使用者自己講的詞，不需要確認步驟，直接套用。"""
+    data = _read_raw_config()
+    excludes = data.setdefault("exclude_keywords", [])
+    if word not in excludes:
+        excludes.append(word)
+    _write_raw_config(data)
+
+
+def remove_exclude_keyword(word: str) -> bool:
+    """「移除排除：<詞>」——修正打錯字用。回傳該詞原本是否存在(供呼叫端
+    決定要不要提示「這個詞本來就不在清單裡」)。"""
+    data = _read_raw_config()
+    excludes = data.get("exclude_keywords", [])
+    if word not in excludes:
+        return False
+    excludes.remove(word)
+    data["exclude_keywords"] = excludes
+    _write_raw_config(data)
+    return True
+
+
+def add_weight_keyword(word: str, weight: int = DEFAULT_KEYWORD_WEIGHT) -> None:
+    """「關鍵字：<詞> [權重]」——權重省略時用DEFAULT_KEYWORD_WEIGHT。"""
+    data = _read_raw_config()
+    weights = data.setdefault("weights", {})
+    weights[word] = weight
+    _write_raw_config(data)
+
+
+def remove_weight_keyword(word: str) -> bool:
+    """「移除關鍵字：<詞>」——修正打錯字用。回傳該詞原本是否存在。"""
+    data = _read_raw_config()
+    weights = data.get("weights", {})
+    if word not in weights:
+        return False
+    del weights[word]
+    data["weights"] = weights
+    _write_raw_config(data)
+    return True
+
+
 def score_title(text: str, salary: float | None = None) -> int:
     if not text:
         return 0

@@ -41,13 +41,13 @@ BASE_BACKOFF_SECONDS = 3
 TIMEOUT_SECONDS = 15
 
 
-def _get_page_with_retry(page: int) -> str | None:
+def _get_page_with_retry(page: int, keyword: str) -> str | None:
     url = SEARCH_URL if page == 1 else f"{SEARCH_URL}/{page}"
     for attempt in range(MAX_RETRIES):
         try:
             resp = requests.get(
                 url, headers=HEADERS,
-                params={"skeyword": SEARCH_KEYWORD, "s_1": "", "s_2": "", "s_3": "", "s_4": ""},
+                params={"skeyword": keyword, "s_1": "", "s_2": "", "s_3": "", "s_4": ""},
                 timeout=TIMEOUT_SECONDS,
             )
             resp.raise_for_status()
@@ -60,19 +60,22 @@ def _get_page_with_retry(page: int) -> str | None:
     return None  # pragma: no cover
 
 
-def _search_fallback_url(company: str) -> str:
+def _search_fallback_url(company: str, keyword: str) -> str:
     """這個平台沒有per-job的獨立網址，改連到帶公司名稱關鍵字的搜尋頁，
     見模組docstring。"""
-    params = urllib.parse.urlencode({"skeyword": company or SEARCH_KEYWORD})
+    params = urllib.parse.urlencode({"skeyword": company or keyword})
     return f"{SEARCH_URL}?{params}"
 
 
-def fetch() -> list[dict]:
-    """回傳最近幾頁搜尋「實習」的職缺(正規化欄位)。是否為真正的實習職缺
-    交由main.py用internship_util.is_relevant()篩選，與其餘來源分工一致。"""
+def fetch(keyword: str = SEARCH_KEYWORD) -> list[dict]:
+    """回傳最近幾頁搜尋keyword的職缺(正規化欄位)。預設SEARCH_KEYWORD("實習")
+    維持main.py既有排程行為不變；career_alignment.py會傳入target_role
+    名稱做履歷對齊分析用的職缺搜尋(2026-08-30新增)。是否為真正的實習
+    職缺交由main.py用internship_util.is_relevant()篩選，與其餘來源分工
+    一致。"""
     items = []
     for page in range(1, PAGES_PER_RUN + 1):
-        html = _get_page_with_retry(page)
+        html = _get_page_with_retry(page, keyword)
         if not html:
             break
         soup = BeautifulSoup(html, "html.parser")
@@ -93,7 +96,7 @@ def fetch() -> list[dict]:
             items.append({
                 "title": f"{comp_text} - {title_text}" if comp_text else title_text,
                 "summary": "\n".join(info_texts),
-                "url": _search_fallback_url(comp_text),
+                "url": _search_fallback_url(comp_text, keyword),
                 "published_at": None,
                 "_filter_text": " ".join([title_text] + info_texts),
                 "_salary_high": None,  # 這個平台不列薪資數字，無法套用高薪加分規則

@@ -42,11 +42,11 @@ BASE_BACKOFF_SECONDS = 3
 TIMEOUT_SECONDS = 15
 
 
-def _get_with_retry() -> str | None:
+def _get_with_retry(keyword: str) -> str | None:
     for attempt in range(MAX_RETRIES):
         try:
             resp = requests.post(
-                SEARCH_URL, headers=HEADERS, data={"find_key1": SEARCH_KEYWORD}, timeout=TIMEOUT_SECONDS,
+                SEARCH_URL, headers=HEADERS, data={"find_key1": keyword}, timeout=TIMEOUT_SECONDS,
             )
             resp.raise_for_status()
             resp.encoding = "utf-8"  # 見模組docstring：網站沒宣告charset，requests會誤判
@@ -58,10 +58,13 @@ def _get_with_retry() -> str | None:
     return None  # pragma: no cover
 
 
-def fetch() -> list[dict]:
-    """回傳搜尋「實習」的第一頁職缺(正規化欄位)。是否為真正的實習職缺
-    交由main.py用internship_util.is_relevant()篩選，與其餘來源分工一致。"""
-    html = _get_with_retry()
+def fetch(keyword: str = SEARCH_KEYWORD) -> list[dict]:
+    """回傳搜尋keyword的第一頁職缺(正規化欄位)。預設SEARCH_KEYWORD("實習")
+    維持main.py既有排程行為不變；career_alignment.py會傳入target_role
+    名稱做履歷對齊分析用的職缺搜尋(2026-08-30新增)。是否為真正的實習
+    職缺交由main.py用internship_util.is_relevant()篩選，與其餘來源分工
+    一致。"""
+    html = _get_with_retry(keyword)
     if not html:
         return []
 

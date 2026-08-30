@@ -49,8 +49,10 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+import career_alignment
 import db
 import resume_matcher
+from scrapers import internship_util
 
 logger = logging.getLogger("resume_bot")
 
@@ -69,6 +71,15 @@ client = discord.Client(intents=intents)
 _URL_RE = re.compile(r"https?://\S+")
 _RESUME_LABEL_RE = re.compile(r"履歷[：:]\s*(https?://\S+)")
 _JOB_LABEL_RE = re.compile(r"職缺[：:]\s*(https?://\S+)")
+
+# 排除/搜尋關鍵字自行迭代指令(2026-08-30新增，見career-profile整合設計
+# 文件)。用^錨定開頭，避免"移除排除：詞"被_ADD_EXCLUDE_RE等短版regex
+# 誤判命中(如果不錨定，"排除："這個子字串會出現在"移除排除："中間)。
+_ADD_EXCLUDE_RE = re.compile(r"^排除[：:]\s*(.+)$")
+_REMOVE_EXCLUDE_RE = re.compile(r"^移除排除[：:]\s*(.+)$")
+_ADD_WEIGHT_RE = re.compile(r"^關鍵字[：:]\s*(\S+?)(?:\s+(\d+))?$")
+_REMOVE_WEIGHT_RE = re.compile(r"^移除關鍵字[：:]\s*(.+)$")
+_ALIGNMENT_TRIGGER = "更新履歷分析"
 
 
 def _parse_resume_job_urls(content: str) -> tuple[str, str, bool] | None:
@@ -181,6 +192,101 @@ async def _handle_specific_match(channel, resume_url: str, job_url: str, order_a
     await _send_chunked(channel, resume_matcher.format_specific_match_result(result))
 
 
+async def _handle_keyword_command(channel, content: str) -> bool:
+    """比對排除/關鍵字自行迭代的4種文字指令，命中就直接套用(使用者自己
+    講的詞，不是AI建議，不需要確認步驟——2026-08-01設計定案)並回覆，
+    回傳True。沒命中任何指令回傳False，呼叫端繼續往下走既有的履歷/URL
+    判斷邏輯。這幾個regex必須排在既有的100字履歷長度判斷、URL-pair
+    判斷之前檢查，否則這類短指令會被誤判成「太短不是履歷」，掉進最後
+    的說明文字分支(見設計文件「實作順序陷阱」)。"""
+    m = _REMOVE_EXCLUDE_RE.match(content)
+    if m:
+        word = m.group(1).strip()
+        existed = internship_util.remove_exclude_keyword(word)
+        internship_util.invalidate_cache()
+        await channel.send(f"已從排除清單移除「{word}」。" if existed else f"「{word}」本來就不在排除清單裡，沒有變動。")
+        return True
+
+    m = _REMOVE_WEIGHT_RE.match(content)
+    if m:
+        word = m.group(1).strip()
+        existed = internship_util.remove_weight_keyword(word)
+        internship_util.invalidate_cache()
+        await channel.send(f"已移除關鍵字「{word}」。" if existed else f"「{word}」本來就不在關鍵字清單裡，沒有變動。")
+        return True
+
+    m = _ADD_EXCLUDE_RE.match(content)
+    if m:
+        word = m.group(1).strip()
+        internship_util.add_exclude_keyword(word)
+        internship_util.invalidate_cache()
+        await channel.send(f"已加入排除清單：「{word}」。")
+        return True
+
+    m = _ADD_WEIGHT_RE.match(content)
+    if m:
+        word = m.group(1).strip()
+        weight = int(m.group(2)) if m.group(2) else internship_util.DEFAULT_KEYWORD_WEIGHT
+        internship_util.add_weight_keyword(word, weight)
+        internship_util.invalidate_cache()
+        await channel.send(f"已加入關鍵字：「{word}」（權重{weight}）。")
+        return True
+
+    return False
+
+
+async def _handle_resume_alignment(message: discord.Message):
+    """「更新履歷分析」觸發：git pull career-profile → 解析target_roles+
+    履歷 → 爬+算詞頻+比對 → 分段回覆，全部包進run_in_executor(2026-08-01
+    設計定案)。履歷來源比照_handle_resume的附件解析——這個bot不持久化
+    履歷內容(見docstring PII處理原則)，需要在同一則訊息附上履歷檔案。"""
+    channel = message.channel
+    supported_attachments = [
+        a for a in message.attachments
+        if Path(a.filename).suffix.lower() in SUPPORTED_SUFFIXES
+    ]
+    if not supported_attachments:
+        await channel.send(
+            f"「{_ALIGNMENT_TRIGGER}」要跟履歷檔案一起附上"
+            f"({'/'.join(SUPPORTED_SUFFIXES)})，這個bot不會記住之前上傳過的履歷內容。"
+        )
+        return
+
+    attachment = supported_attachments[0]
+    with tempfile.NamedTemporaryFile(suffix=Path(attachment.filename).suffix, delete=False) as tmp:
+        tmp_path = tmp.name
+
+    loop = asyncio.get_running_loop()
+    try:
+        await attachment.save(Path(tmp_path))
+        try:
+            resume_text = await loop.run_in_executor(None, resume_matcher.extract_text, tmp_path)
+        except Exception as e:
+            await channel.send(f"履歷解析失敗：{e}")
+            return
+    finally:
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+
+    if not resume_text or not resume_text.strip():
+        await channel.send("解析出來是空白內容，請確認檔案本身有文字(不是純掃描圖片PDF)。")
+        return
+
+    await channel.send(
+        "收到了，正在git pull career-profile+爬取真實招募文案分析落差，"
+        "這會花一點時間（每個target_role都要跑一輪104/518/yes123/gift的抓取）..."
+    )
+
+    pull_err = await loop.run_in_executor(None, career_alignment.pull_latest)
+    if pull_err:
+        await channel.send(f"警告：career-profile git pull失敗，沿用本機既有清單：{pull_err}")
+
+    result = await loop.run_in_executor(None, career_alignment.analyze, resume_text)
+    await _send_chunked(channel, career_alignment.format_report_text(result))
+
+
 @client.event
 async def on_ready():
     logger.info("resume_bot已上線：%s", client.user)
@@ -192,6 +298,18 @@ async def on_message(message: discord.Message):
         return
     if str(message.channel.id) != RESUME_BOT_CHANNEL_ID:
         return  # 只處理指定頻道，避免在其他頻道誤觸發(履歷內容屬PII，見docstring)
+
+    content = (message.content or "").strip()
+
+    # 排除/關鍵字自行迭代指令 + 履歷對齊分析觸發，必須排在下面的附件/
+    # URL-pair/100字履歷長度判斷之前檢查(見_handle_keyword_command
+    # docstring「實作順序陷阱」)。
+    if content:
+        if await _handle_keyword_command(message.channel, content):
+            return
+        if content == _ALIGNMENT_TRIGGER:
+            await _handle_resume_alignment(message)
+            return
 
     supported_attachments = [
         a for a in message.attachments

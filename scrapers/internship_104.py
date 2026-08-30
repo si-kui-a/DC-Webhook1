@@ -45,16 +45,21 @@ BASE_BACKOFF_SECONDS = 3
 TIMEOUT_SECONDS = 15
 
 
-def _get_page_with_retry(page: int) -> dict | None:
+def _get_page_with_retry(page: int, keyword: str) -> dict | None:
     params = {
-        "keyword": SEARCH_KEYWORD,
+        "keyword": keyword,
         "order": 15,  # 依最新排序(比照瀏覽器實測的預設排序值)
         "page": page,
         "pagesize": PAGE_SIZE,
     }
+    # keyword可能不是預設的SEARCH_KEYWORD(見career_alignment.py用職缺
+    # 名稱參數化搜尋)，Referer header也要換成對應關鍵字，否則跟params
+    # 的keyword對不上，2026-08-30新增。
+    headers = dict(HEADERS)
+    headers["Referer"] = f"https://www.104.com.tw/jobs/search/?keyword={urllib.parse.quote(keyword)}"
     for attempt in range(MAX_RETRIES):
         try:
-            resp = requests.get(API_URL, headers=HEADERS, params=params, timeout=TIMEOUT_SECONDS)
+            resp = requests.get(API_URL, headers=headers, params=params, timeout=TIMEOUT_SECONDS)
             resp.raise_for_status()
             return resp.json()
         except (requests.RequestException, ValueError):
@@ -96,13 +101,15 @@ def _parse_salary_high(record: dict) -> float | None:
         return None
 
 
-def fetch() -> list[dict]:
-    """回傳最近幾頁(依最新排序)搜尋「實習」的原始職缺(正規化欄位)。
+def fetch(keyword: str = SEARCH_KEYWORD) -> list[dict]:
+    """回傳最近幾頁(依最新排序)搜尋keyword的原始職缺(正規化欄位)。預設
+    SEARCH_KEYWORD("實習")維持main.py既有排程行為不變；career_alignment.py
+    會傳入target_role名稱做履歷對齊分析用的職缺搜尋(2026-08-30新增)。
     是否為真正的實習職缺由main.py用internship_util.is_relevant()篩選，
     與MOL來源分工一致。"""
     items = []
     for page in range(1, PAGES_PER_RUN + 1):
-        data = _get_page_with_retry(page)
+        data = _get_page_with_retry(page, keyword)
         if not data:
             break
         records = data.get("data", [])

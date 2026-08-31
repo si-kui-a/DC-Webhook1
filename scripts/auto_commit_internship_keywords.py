@@ -15,7 +15,7 @@ scraper-integration-plan「3. 定期自動commit+push」）：範圍窄(純字�
 
 建議排程(Windows Scheduled Task，比照scripts/setup_scheduled_tasks.ps1
 既有慣例，每月一次)：
-    $Python = 'C:\Projects\10-501_Intel_Pusher_股票情報推播機器人\venv\Scripts\python.exe'
+    $Python = 'C:\Projects\10-501_Intel_Pusher_股票情報推播機器人\venv\Scripts\pythonw.exe'
     $Script = 'C:\Projects\10-501_Intel_Pusher_股票情報推播機器人\scripts\auto_commit_internship_keywords.py'
     $action = New-ScheduledTaskAction -Execute $Python -Argument "`"$Script`""
     Register-ScheduledTask -TaskName 'IntelPusher-KeywordsAutoCommit' -Action $action `
@@ -37,9 +37,13 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(me
 logger = logging.getLogger("auto_commit_internship_keywords")
 
 
+_NO_WINDOW = subprocess.CREATE_NO_WINDOW if hasattr(subprocess, "CREATE_NO_WINDOW") else 0
+# 這支腳本規劃要用pythonw.exe(無視窗)排程啟動——git是主控台子系統程式，
+# 從無視窗父行程叫出時Windows預設會彈出可見主控台視窗閃現，加這個旗標抑制。
 def _run(args: list[str]) -> subprocess.CompletedProcess:
     return subprocess.run(
         args, cwd=REPO_ROOT, capture_output=True, text=True, encoding="utf-8",
+        creationflags=_NO_WINDOW,
     )
 
 

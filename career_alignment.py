@@ -53,6 +53,8 @@ def is_available() -> bool:
     return CAREER_REPO_DIR.is_dir() and (CAREER_REPO_DIR / ".git").is_dir()
 
 
+_NO_WINDOW = subprocess.CREATE_NO_WINDOW if hasattr(subprocess, "CREATE_NO_WINDOW") else 0
+
 def pull_latest() -> str | None:
     """git pull失敗時回傳錯誤訊息；成功回傳None。呼叫端決定要不要在
     pull失敗時仍沿用本機既有(可能較舊)的target_roles清單。"""
@@ -61,6 +63,7 @@ def pull_latest() -> str | None:
     result = subprocess.run(
         ["git", "pull", "origin", "main"], cwd=CAREER_REPO_DIR,
         capture_output=True, text=True, encoding="utf-8",
+        creationflags=_NO_WINDOW,
     )
     if result.returncode != 0:
         return result.stderr.strip() or "git pull失敗，原因不明"

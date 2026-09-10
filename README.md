@@ -34,10 +34,9 @@ python scripts/show_source_status.py
 ```
 
 輸出直接讀`jobs/*.py`裡的registry dict，永遠反映當下實際狀態，不需要
-手動維護。截至最近一次確認共31個來源/頻道(即時推播6+晚間彙整7+大總結
-2+模擬持倉3+獎學金4+實習求職5+獨立排程4)。排程頻率/是否真的有排上
-Windows Task Scheduler不在這支腳本範圍內，查`Get-ScheduledTask
--TaskName "IntelPusher-*"`。
+手動維護——刻意不在這裡寫死總數，寫了就是重蹈被取代那份表格的覆轍。
+排程頻率/是否真的有排上Windows Task Scheduler不在這支腳本範圍內，查
+`Get-ScheduledTask -TaskName "IntelPusher-*"`。
 
 ## 已知限制
 

@@ -2,7 +2,10 @@
 (2026-09-10新增，同日追加Telegram提醒推播)。
 
 取代原本教育類(scholarship/internship)的Telegram通知(使用者2026-09-10
-確認拿掉)：EDU bot往後專用於這支job的東海行事曆提醒(使用者同日再確認)。
+確認拿掉)：EDU bot改以這支job的東海行事曆提醒為主要用途(使用者同日再
+確認)。注意sig_watch.py(留德網站內容監測)仍照原樣繼續共用同一組EDU
+bot token/chat_id發自己的訊息(季排程，內容異常時才發)——同一個Telegram
+對話裡偶爾出現的訊息不一定都跟行事曆有關，不要假設全部都是。
 
 兩件事各自獨立執行、互不影響：
 1. 把scrapers/thu_calendar.py抓到的當期學期事件寫成
@@ -89,7 +92,12 @@ def run_thu_calendar():
     try:
         calendar = get_current_semester_calendar()
     except Exception as e:
-        logger.error("[thu_calendar] 抓取/解析失敗: %s", e)
+        # 刻意不退回讀取昨天寫的data/thu_academic_calendar.json當作降級
+        # 資料來源——http_client.get()本身已有3次重試，會走到這裡代表
+        # Google Calendar這個大型服務當天真的整段掛掉，機率低到不值得
+        # 為此多維護一套「用舊資料照樣推提醒」的分支與測試；後果最多是
+        # 當天沒收到提醒，隔天資料若沒變照常補上，不是資料損毀。
+        logger.error("[thu_calendar] 抓取/解析失敗，今天不推播提醒: %s", e)
         return
 
     with open(THU_CALENDAR_PATH, "w", encoding="utf-8") as f:

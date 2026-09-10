@@ -11,7 +11,6 @@ import index_dca_engine
 import price_feed
 import summarizer_en
 import summarizer_zh
-import notify_telegram
 from push_webhook import build_embed, send_webhook
 from scrapers import tsmc, fed, cbc, etf0050, macro_fred, twse_financials, rental_search
 from scrapers.contracts import validate_items
@@ -223,23 +222,6 @@ def run_scholarship():
             for item in items:
                 db.mark_published(item["item_id"])
 
-    # Telegram — 僅簡短通知，不再在頻道內發佈完整內容；完整獎學金全數統一於
-    # Discord 機器人完整輸出（見上方 webhook 推播）。
-    source_summary = "、".join(
-        f"{name}（{len(items)} 筆）"
-        for name, items in new_items_by_source.items()
-        if items
-    )
-    tg_brief = (
-        f"📚 *獎學金快報已更新*\n"
-        f"共 {total_new} 筆新項目\n"
-        f"來源：{source_summary}\n\n"
-        f"完整內容請至 Discord #獎學金頻道查看"
-    )
-    # 獎學金屬於教育類內容，改用獨立的Schule mithelfer bot，不跟財經類的
-    # finfeed bot共用(使用者確認2026-07-30)。
-    notify_telegram.send_message(
-        tg_brief,
-        bot_token=notify_telegram.TELEGRAM_EDU_BOT_TOKEN,
-        chat_id=notify_telegram.TELEGRAM_EDU_CHAT_ID,
-    )
+    # Telegram簡短通知已於2026-09-10移除(使用者確認)：教育類EDU bot改為
+    # jobs/thu_calendar.py的東海行事曆合併用途，獎學金完整內容維持只在
+    # Discord頻道推播(見上方webhook推播)，不再重複發Telegram。

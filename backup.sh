@@ -56,8 +56,8 @@ fi
 #    只能靠手動commit才會進版控，夜間自動備份完全沒覆蓋到，一併補上。
 git add scrapers/ main.py db.py push_webhook.py encrypt_backup.py schema.sql \
         summarizer_zh.py summarizer_en.py ai_insight.py digest_format.py \
-        notify_telegram.py price_feed.py config/ scripts/ docs/ \
-        README.md requirements.txt backup.sh CLAUDE.md \
+        notify_telegram.py price_feed.py config/ scripts/ docs/ jobs/ \
+        data/ README.md requirements.txt backup.sh CLAUDE.md \
         .gitignore .env.example Meta_Dev_Knowledge.md Meta_User_Feedback.md 2>/dev/null || true
 
 # 3. 若沒有變更，git commit 會因為「nothing to commit」而失敗（不是產生空

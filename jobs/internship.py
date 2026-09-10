@@ -11,7 +11,6 @@ import index_dca_engine
 import price_feed
 import summarizer_en
 import summarizer_zh
-import notify_telegram
 from push_webhook import build_embed, send_webhook
 from scrapers import tsmc, fed, cbc, etf0050, macro_fred, twse_financials, rental_search
 from scrapers.contracts import validate_items
@@ -112,11 +111,11 @@ def _push_internship_style_batch(
     total_new: int,
     embed_title: str,
     footer: str,
-    tg_header: str,
-    tg_channel_hint: str,
 ):
-    """實習頻道/求職頻道共用的推播+標記+Telegram通知邏輯(2026-07-31抽出，
-    避免run_internship()裡兩個頻道各自複製一份幾乎一樣的程式碼)。"""
+    """實習頻道/求職頻道共用的推播+標記邏輯(2026-07-31抽出，避免
+    run_internship()裡兩個頻道各自複製一份幾乎一樣的程式碼)。Telegram
+    簡短通知已於2026-09-10移除(使用者確認)：教育類EDU bot改為
+    jobs/thu_calendar.py的東海行事曆合併用途。"""
     chunks = _build_internship_batch(items_by_source, title=embed_title)
     if not chunks:
         logger.warning("%s 文字組裝失敗（可能為空）", embed_title)
@@ -142,25 +141,6 @@ def _push_internship_style_batch(
         for items in items_by_source.values():
             for item in items:
                 db.mark_published(item["item_id"])
-
-    # 比照run_scholarship()的Telegram簡短通知模式(使用者確認2026-07-30
-    # 加上)，同樣用Schule mithelfer bot(教育類，跟財經的finfeed bot分開)。
-    source_summary = "、".join(
-        f"{name}（{len(items)} 筆）"
-        for name, items in items_by_source.items()
-        if items
-    )
-    tg_brief = (
-        f"{tg_header}\n"
-        f"共 {total_new} 筆新項目\n"
-        f"來源：{source_summary}\n\n"
-        f"完整內容請至 Discord {tg_channel_hint} 查看"
-    )
-    notify_telegram.send_message(
-        tg_brief,
-        bot_token=notify_telegram.TELEGRAM_EDU_BOT_TOKEN,
-        chat_id=notify_telegram.TELEGRAM_EDU_CHAT_ID,
-    )
 
 
 def run_internship():
@@ -276,7 +256,6 @@ def run_internship():
             _push_internship_style_batch(
                 internship_webhook, internship_items_by_source, internship_total,
                 embed_title="💼 台灣實習快報", footer="台灣實習監控",
-                tg_header="💼 *台灣實習快報已更新*", tg_channel_hint="#台灣實習情報",
             )
         else:
             logger.error("缺少環境變數 %s，實習頻道 %d 筆新項目未推播", INTERNSHIP_WEBHOOK_ENV, internship_total)
@@ -286,7 +265,6 @@ def run_internship():
             _push_internship_style_batch(
                 job_search_webhook, job_search_items_by_source, job_search_total,
                 embed_title="🧑‍💼 台灣求職快報", footer="台灣求職監控",
-                tg_header="🧑‍💼 *台灣求職快報已更新*", tg_channel_hint="#台灣求職",
             )
         else:
             logger.error("缺少環境變數 %s，求職頻道 %d 筆新項目未推播", JOB_SEARCH_WEBHOOK_ENV, job_search_total)

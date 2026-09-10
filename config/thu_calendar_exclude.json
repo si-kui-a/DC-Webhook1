@@ -7,5 +7,6 @@
   "alumni_or_public_events": ["校友", "牛奶節", "表揚大會"],
   "new_student_only": ["新生"],
   "international_student_only": ["境外", "僑生", "外籍"],
-  "leave_or_withdrawal": ["休學", "退學"]
+  "leave_or_withdrawal": ["休學", "退學"],
+  "graduate_student_only": ["研究生"]
 }

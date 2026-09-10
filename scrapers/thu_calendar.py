@@ -98,6 +98,31 @@ def is_relevant_to_students(title: str) -> bool:
     return not any(kw in title for kw in config["exclude_keywords"])
 
 
+_EXAM_OR_COURSE_SELECTION_KEYWORDS = ["考試", "退選", "預選", "停修", "所選課程"]
+
+
+def is_exam_or_course_selection(title: str) -> bool:
+    """考試/選課類事項的提醒節奏比一般事項密集(使用者2026-09-10確認)，
+    見get_reminder_trigger_dates()。「退選」涵蓋「加退選」「特殊退選」，
+    「所選課程」涵蓋「確認本學期所選課程」。"""
+    return any(kw in title for kw in _EXAM_OR_COURSE_SELECTION_KEYWORDS)
+
+
+def get_reminder_trigger_dates(event_date: date, title: str) -> set[date]:
+    """回傳這個事件該在哪幾天推播Telegram提醒(使用者2026-09-10確認的
+    節奏)。一般事項：前一週+當日。考試/選課類：前一個月+前二週+當週一
+    (事件當週的星期一)+當日。多天事件(如考試週)一律用起始日當基準。"""
+    if is_exam_or_course_selection(title):
+        monday = event_date - timedelta(days=event_date.weekday())
+        return {
+            event_date - timedelta(days=30),
+            event_date - timedelta(days=14),
+            monday,
+            event_date,
+        }
+    return {event_date - timedelta(days=7), event_date}
+
+
 def _unescape_ics_text(value: str) -> str:
     """ICS TEXT escaping(RFC 5545 §3.3.11)。"""
     return (

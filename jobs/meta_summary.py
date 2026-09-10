@@ -1,33 +1,12 @@
 """Extracted from main.py by _extract_jobs.py (2026-08-30) — see git history for the original single-file version. Logic below is a verbatim move, not a rewrite."""
-import json
 import logging
 import os
-from datetime import datetime, timezone, timedelta
-from email.utils import parsedate_to_datetime
+from datetime import datetime
 
 import ai_insight
 import db
-import index_dca_engine
-import price_feed
-import summarizer_en
-import summarizer_zh
-import notify_telegram
-from push_webhook import build_embed, send_webhook
-from scrapers import tsmc, fed, cbc, etf0050, macro_fred, twse_financials, rental_search
-from scrapers.contracts import validate_items
-from scrapers.health import record as record_source_health
-from scrapers import substack_generic
-from scrapers import semi_supply_chain
+from push_webhook import send_webhook
 import digest_format
-from scrapers import scholarship_daad, scholarship_moe, scholarship_thu, scholarship_efg
-from scrapers import scholarship_util
-from scrapers import internship_mol
-from scrapers import internship_104
-from scrapers import internship_rich
-from scrapers import internship_yes123
-from scrapers import internship_gift
-from scrapers import internship_util
-from scrapers import sig_content_watch
 
 logger = logging.getLogger("main")
 

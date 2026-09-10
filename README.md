@@ -1,6 +1,6 @@
-# Intel Pusher — 最快可行方案（MVP 骨架）
+# Intel Pusher — 股票/獎學金/實習/行事曆情報推播機器人
 
-不用 n8n。純 Python + cron + SQLite。理由見企劃報告結論：n8n 的核心優勢（免寫 code 的視覺化維護）在「用 Claude 直接寫程式碼」的情境下不成立，只會多一層部署成本。
+不用 n8n。純 Python + SQLite + Windows Task Scheduler。理由見企劃報告結論：n8n 的核心優勢（免寫 code 的視覺化維護）在「用 Claude 直接寫程式碼」的情境下不成立，只會多一層部署成本。
 
 ## 安裝
 
@@ -10,14 +10,14 @@ python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
 cp .env.example .env
-# 編輯 .env，填入 4 組 Discord Webhook URL
+# 編輯 .env，依 .env.example 填入所需的 Discord Webhook URL(數量會隨頻道增減，不寫死)
 ```
 
 ## 執行
 
 ```bash
 python main.py --source fed       # 單一來源測試
-python main.py --source all       # 全部 4 個核心來源
+python main.py --source all       # 跑SOURCE_REGISTRY內建的所有即時推播來源(不含彙整/批次類，見下方"目前啟用的來源/頻道")
 ```
 
 第一次執行會自動建立 `data.db`（SQLite），不需要額外安裝資料庫。
@@ -47,7 +47,7 @@ Windows Task Scheduler不在這支腳本範圍內，查`Get-ScheduledTask
 
 ## GitHub 自動備份
 
-不使用 GitHub Actions（那是在 GitHub 雲端執行，違反本專案「全部依靠本地端運行」的原則）。改用本地 cron 觸發本地 `git push`，GitHub 只是異地儲存目的地。
+不使用 GitHub Actions（那是在 GitHub 雲端執行，違反本專案「全部依靠本地端運行」的原則）。改用本地 Windows Task Scheduler 觸發本地 `git push`（`backup.sh`），GitHub 只是異地儲存目的地。
 
 ### 設定步驟（僅需一次）
 
@@ -75,26 +75,6 @@ chmod +x backup.sh
 確認無誤後，依 `scripts/setup_scheduled_tasks.ps1` 建立 Windows 工作排程即可全自動運作
 （本專案實際跑在 Windows Task Scheduler 上，不是 cron——`crontab.example` 是早期
 規劃階段假設的部署方式，跟實際情況不符，已移除）。
-
-## 目錄結構
-
-```
-intel-pusher/
-├── main.py              # 執行入口
-├── db.py                # SQLite 存取層
-├── push_webhook.py       # 通用 Discord 發送器（29 個頻道共用）
-├── schema.sql            # 資料表定義
-├── scrapers/
-│   ├── tsmc.py
-│   ├── fed.py
-│   ├── cbc.py
-│   ├── etf0050.py
-│   └── semi_supply_chain.py   # stub，未實作
-├── .env.example
-├── requirements.txt
-└── scripts/
-    └── setup_scheduled_tasks.ps1   # 建立Windows Task Scheduler排程(需系統管理員)
-```
 
 ## 租屋搜尋（零 AI）
 租屋來源不自動猜測；以 `RENTAL_FEED_URLS` 明確列出已獲授權的 RSS、JSON 或 HTML 來源。可用 `RENTAL_AREAS`、`RENTAL_MAX_MONTHLY`、`RENTAL_MIN_PING`、`RENTAL_KEYWORDS`、`RENTAL_EXCLUDE` 篩選。

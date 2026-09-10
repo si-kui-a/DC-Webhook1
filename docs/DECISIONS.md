@@ -91,6 +91,15 @@ add_thu_calendar_task.ps1`)，每天06:00、pythonw.exe執行
 +重跑即可調整)——已在回覆裡把這個副作用講清楚，使用者若想留下這筆可以
 直接說。
 
+**例外清單(2026-09-10同日，使用者確認「這個改回來」)**：加入
+`force_include: ["大二以上及研究生"]`，比對優先於所有排除類別。
+`_load_filter_config()`同時回傳exclude_keywords跟force_include_keywords，
+`is_relevant_to_students()`先檢查force_include再檢查排除詞。30筆→31筆
+(「加退選課程開始（大二以上及研究生）」復活，其餘4筆純研究生事項維持
+排除)。這是目前唯一的例外項目，不是通用規則——未來若行事曆出現新的
+「混合對象」事項(某群體本該排除但同時涵蓋其他該保留的族群)，需要
+使用者另外確認才加進這份清單，不會自動套用同樣邏輯。
+
 ## 財經預設bot(TELEGRAM_BOT_TOKEN)停擺調查
 
 **現況**：`.env`裡`TELEGRAM_BOT_TOKEN`目前是空的，`TELEGRAM_CHAT_ID`還

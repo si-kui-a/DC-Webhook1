@@ -48,43 +48,54 @@ _DTSTART_RE = re.compile(r"^DTSTART(?:;[^:\n]*)?:(\d{8})", re.MULTILINE)
 _DTEND_RE = re.compile(r"^DTEND(?:;[^:\n]*)?:(\d{8})", re.MULTILINE)
 _SUMMARY_RE = re.compile(r"^SUMMARY:(.*)$", re.MULTILINE)
 
-_exclude_keywords_cache: list[str] | None = None
+_filter_config_cache: dict | None = None
 
 
-def _load_exclude_keywords() -> list[str]:
-    """讀config/thu_calendar_exclude.json，攤平成單一關鍵字清單(子字串
-    比對，比照scholarship_util.py/internship_util.py既有的排除詞慣例)。"""
-    global _exclude_keywords_cache
-    if _exclude_keywords_cache is not None:
-        return _exclude_keywords_cache
+def _load_filter_config() -> dict:
+    """讀config/thu_calendar_exclude.json，拆成exclude_keywords(攤平成
+    單一關鍵字清單，子字串比對，比照scholarship_util.py/internship_util.py
+    既有的排除詞慣例)跟force_include_keywords(排除詞的例外清單，比對
+    優先於排除詞——處理「某事項同時涵蓋要排除跟不排除的對象」這種子字串
+    比對本身分辨不出來的情況，見force_include在JSON裡的_comment說明)。"""
+    global _filter_config_cache
+    if _filter_config_cache is not None:
+        return _filter_config_cache
     try:
         with open(_EXCLUDE_PATH, encoding="utf-8") as f:
             raw = json.load(f)
     except Exception as e:
         logger.warning("讀取排除詞設定失敗 %s: %s，本次不排除任何事件", _EXCLUDE_PATH, e)
-        _exclude_keywords_cache = []
-        return _exclude_keywords_cache
+        _filter_config_cache = {"exclude_keywords": [], "force_include_keywords": []}
+        return _filter_config_cache
 
-    keywords = []
+    exclude_keywords = []
+    force_include_keywords = list(raw.get("force_include", []))
     for key, value in raw.items():
-        if key.startswith("_") or not isinstance(value, list):
+        if key.startswith("_") or key == "force_include" or not isinstance(value, list):
             continue
-        keywords.extend(value)
-    _exclude_keywords_cache = keywords
-    return keywords
+        exclude_keywords.extend(value)
+    _filter_config_cache = {
+        "exclude_keywords": exclude_keywords,
+        "force_include_keywords": force_include_keywords,
+    }
+    return _filter_config_cache
 
 
 def invalidate_cache():
     """外部(main.py)在每次執行前呼叫，確保排除詞設定變更即時生效。"""
-    global _exclude_keywords_cache
-    _exclude_keywords_cache = None
+    global _filter_config_cache
+    _filter_config_cache = None
 
 
 def is_relevant_to_students(title: str) -> bool:
     """排除明確屬於教職員行政會議/教職員專屬活動/全校設施維護/校友或公開
-    慶典類的事項(使用者2026-09-10確認「只要推播與在學學生明確相關的」)；
-    其餘一律視為相關，不做未經確認的臆測式二次篩選。"""
-    return not any(kw in title for kw in _load_exclude_keywords())
+    慶典類/新生/境外(外籍)學生/休學退學/純研究生的事項(使用者2026-09-10
+    陸續確認的篩選條件)；force_include清單裡的事項無論如何都保留。其餘
+    一律視為相關，不做未經確認的臆測式二次篩選。"""
+    config = _load_filter_config()
+    if any(kw in title for kw in config["force_include_keywords"]):
+        return True
+    return not any(kw in title for kw in config["exclude_keywords"])
 
 
 def _unescape_ics_text(value: str) -> str:

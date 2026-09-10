@@ -108,8 +108,9 @@ add_thu_calendar_task.ps1`)，每天06:00、pythonw.exe執行
 休學退學相關截止日、純研究生事項。
 
 **加上Telegram提醒推播(2026-09-10同日，使用者確認「Telegram往後專用於
-東海行事曆推播」)**：EDU bot從此不再服務scholarship/internship，改為
-這支job專用。`scrapers/thu_calendar.py`新增
+東海行事曆推播」)**：EDU bot從此不再服務scholarship/internship，改以
+這支job為主要用途(sig_watch.py仍照原樣共用同一組token/chat_id，未變動)。
+`scrapers/thu_calendar.py`新增
 `get_reminder_trigger_dates(event_date, title)`：一般事項提醒節奏是
 「前一週+當日」；考試/選課類(關鍵字「考試」「退選」「預選」「停修」
 「所選課程」判斷，涵蓋期中/學期考試週、加退選、特殊退選、確認所選

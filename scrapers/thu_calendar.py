@@ -138,13 +138,23 @@ def _parse_ics_date(value: str) -> date:
     return datetime.strptime(value[:8], "%Y%m%d").date()
 
 
+def _unfold_ics_lines(text: str) -> str:
+    """RFC 5545 §3.1行折疊還原：延續行以單一空白或tab開頭，要接回上一行。
+    2026-09-10實測目前1687筆事件的SUMMARY沒有被折疊過，但這只保證「現有
+    資料沒有」，不保證未來新增的長標題(中文3 bytes/字，超過75 octets就
+    可能被折疊)不會——不先做這一步，未來一旦真的出現折疊，會靜默截斷
+    標題而不是報錯，錯誤資料還會被寫進data/thu_academic_calendar.json
+    並推播到Telegram。"""
+    return text.replace("\r\n ", "").replace("\r\n\t", "")
+
+
 def fetch_raw_events() -> list[dict]:
     """下載並解析整份ics，回傳全部事件(未依學期篩選)。all-day事件的
     DTEND依ICS規範是「排他」結束日(隔天)，這裡先轉成「實際最後一天」
     (DTEND-1)，跟一般人認知的日期一致。"""
     resp = get(ICS_URL)
     resp.raise_for_status()
-    text = resp.text
+    text = _unfold_ics_lines(resp.text)
 
     events = []
     for block in text.split("BEGIN:VEVENT")[1:]:
@@ -195,6 +205,13 @@ def get_current_semester_calendar(today: date | None = None) -> dict:
         current_start, current_label = markers[0]
 
     if next_start is None:
+        # 教務處還沒公布下一學期的開學日標記時會走到這裡——不是理論上的
+        # edge case，是「行事曆更新進度」的正常滯後，每次都可能發生。
+        # 用180天當保守上限，只記log不擋流程；不用刻意去追蹤發生頻率。
+        logger.warning(
+            "行事曆裡找不到%s之後的下一個學期標記，range_end用+180天保守推估",
+            current_label,
+        )
         next_start = current_start + timedelta(days=180)
 
     selected = sorted(

@@ -11,6 +11,19 @@ class UnescapeIcsTextTests(unittest.TestCase):
         self.assertEqual(thu_calendar._unescape_ics_text(raw), "A, B; C\\D\nE")
 
 
+class UnfoldIcsLinesTests(unittest.TestCase):
+    def test_joins_rfc5545_folded_continuation_lines(self):
+        folded = "SUMMARY:第一段\r\n 接續內容\r\nDTSTART;VALUE=DATE:20260101\r\n"
+        self.assertEqual(
+            thu_calendar._unfold_ics_lines(folded),
+            "SUMMARY:第一段接續內容\r\nDTSTART;VALUE=DATE:20260101\r\n",
+        )
+
+    def test_leaves_unfolded_text_unchanged(self):
+        text = "SUMMARY:單行標題\r\nDTSTART;VALUE=DATE:20260101\r\n"
+        self.assertEqual(thu_calendar._unfold_ics_lines(text), text)
+
+
 class ExamOrCourseSelectionTests(unittest.TestCase):
     def test_matches_exam_and_course_selection_keywords(self):
         for title in ["期中考試週", "學期考試週", "加退選課程開始（大一新生）",

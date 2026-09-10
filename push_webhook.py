@@ -1,6 +1,7 @@
 """
 push_webhook.py — 通用 Discord Webhook 發送器。
-29 個頻道共用同一份邏輯：只是 URL 不同，格式一致。
+各推播頻道共用同一份邏輯：只是 URL 不同，格式一致(頻道數量會隨新增
+來源增減，見scripts/show_source_status.py，不在此寫死數字)。
 含 429 退避重試，避免短時間大量推播觸發 rate limit。
 """
 import time

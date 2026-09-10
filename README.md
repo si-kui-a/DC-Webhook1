@@ -22,49 +22,28 @@ python main.py --source all       # 全部 4 個核心來源
 
 第一次執行會自動建立 `data.db`（SQLite），不需要額外安裝資料庫。
 
-## 已完成 vs 尚未完成
+## 目前啟用的來源/頻道
 
-| 來源 | 狀態 | 說明 |
-|---|---|---|
-| Fed（`fed.py`） | 可執行，selector 待實測 | 已確認 URL：`federalreserve.gov/newsevents/pressreleases/2026-press-fomc.htm`。.gov 官方頁，非 JS 動態渲染，穩定性最高，**建議第一個測試**。 |
-| 台灣央行（`cbc.py`） | 可執行，selector 待實測 | 已確認 URL：`cbc.gov.tw/tw/lp-302-1.html`。政府 CMS 系統，URL pattern 沿用多年。 |
-| 台積電（`tsmc.py`） | 可執行，selector 待實測，**有風險** | IR 頁面疑似部分內容 JS 動態渲染，若 `requests+BeautifulSoup` 抓不到資料，需改用 Playwright 渲染後再解析（見下方「已知限制」）。 |
-| 0050（`etf0050.py`） | 可執行，selector 待實測 | 已確認 URL：`yuantaetfs.com/product/detail/0050/ratio`，頁面有清楚的持股表格。 |
-| 半導體供應鏈（`semi_supply_chain.py`） | **未實作（stub）** | 未找到穩定 A 級來源。DIGITIMES 需訂閱、反爬防護強；MOPS 可行但需要你先確認「前中段供應鏈」公司代碼白名單。**這是唯一卡住的項目，其餘 4 個可以先跑。** |
+這份清單以前是手寫表格，寫於專案第一天(還在講「沙盒環境連不上網站」
+「selector 待實測」)，一個多月來所有來源早就上線，但表格從沒人更新過，
+變成主動誤導(例如曾長期寫著「半導體供應鏈未實作」，其實已經是正常運作
+中的頻道)。改成執行下面這行直接看：
 
-## 已實測狀態（誠實揭露）
+```bash
+python scripts/show_source_status.py
+```
 
-我在自己的沙盒環境跑了 `python main.py --source fed/cbc/etf0050` 做真實抓取測試，結果是：**全部被我方沙盒的網路白名單擋下（HTTP 403, `x-deny-reason: host_not_allowed`），不是目標網站拒絕**。我的執行環境只能連線到 pypi、github、npm 等開發用網域，無法連到 `federalreserve.gov`、`cbc.gov.tw`、`yuantaetfs.com` 這類一般網站。
-
-這代表：
-
-- **程式碼語法與模組邏輯已驗證無誤**（DB 初始化、Webhook payload 建構、模組匯入全部通過）。
-- **實際 HTML 結構是否符合 selector 假設，我這邊沒有辦法驗證**——因為我的環境連不上這些網站，只能靠先前搜尋結果的文字內容合理推測 selector 寫法。
-- **你在自己的機器上執行時，這些請求會是正常的**（你的機器沒有我這種網域白名單限制），但這也代表**第一次真實執行的結果現在無法預先保證**。
-
-**你拿到這份骨架後，請先在你自己的機器跑一次 `python main.py --source fed`，把 log 貼給我，我可以直接看真實 HTML 結構把 selector 修到能動為止**——這比我在無法連線的環境裡繼續猜測 selector 更有效率。
-
-## 為什麼每個 scraper 都寫「selector 待實測」
-
-我用搜尋工具確認了每個來源的**網址**存在且內容相關，但沒有實際渲染頁面去讀 HTML 結構、也沒有執行程式碼驗證 selector 抓不抓得到資料。這代表：
-
-1. `requests.get()` 抓到的原始 HTML，跟你在瀏覽器看到的畫面，如果該頁面用 JS 動態載入內容，兩者會不一樣。
-2. 目前 scraper 裡的 CSS selector（例如 `soup.select("a[href*='investor-meetings']")`）是根據頁面**性質**合理推測寫的，不是根據抓到的真實 HTML 反推的。
-
-**這不是「還沒做完」，是誠實標註「這裡有一步驗證還沒做」**——比起寫一個看起來完整但實際跑不出結果的 scraper，先讓你知道哪一步需要你或我再花 10 分鐘打開瀏覽器 F12 核對一次，風險更低。
-
-## 下一步（每個 scraper 各約 10–15 分鐘）
-
-1. 執行 `python main.py --source fed`。
-2. 若 log 顯示「本次無新資料」但你確定該頁面有內容，代表 selector 沒抓到東西——需要用瀏覽器開發者工具（F12）打開該網址，找到實際的 HTML 結構，回來調整 `scrapers/fed.py` 裡的 `soup.find_all(...)` 條件。
-3. 依序對 `cbc.py`、`etf0050.py`、`tsmc.py` 做同樣的事。
-4. 半導體供應鏈：先決定 MOPS 白名單或 DIGITIMES 標題頁，我再補完整實作。
+輸出直接讀`jobs/*.py`裡的registry dict，永遠反映當下實際狀態，不需要
+手動維護。截至最近一次確認共31個來源/頻道(即時推播6+晚間彙整7+大總結
+2+模擬持倉3+獎學金4+實習求職5+獨立排程4)。排程頻率/是否真的有排上
+Windows Task Scheduler不在這支腳本範圍內，查`Get-ScheduledTask
+-TaskName "IntelPusher-*"`。
 
 ## 已知限制
 
-- **JS 動態渲染頁面**：`requests` 只拿到伺服器回傳的原始 HTML，不會執行 JavaScript。如果某來源的資料是靠前端 JS 抓 API 填進去的，`requests+BeautifulSoup` 會抓空。解法：改用 `playwright`（`pip install playwright && playwright install chromium`），用無頭瀏覽器渲染後再解析，但這會讓每次抓取變慢（多 2–5 秒）且多一個系統依賴。
-- **單機單點故障**：目前沒有背景常駐 process，靠 cron 觸發，若主機關機則不會補跑錯過的排程（cron 本身不做這件事）。若在意這點，之後可加 `anacron` 或改用 systemd timer。
-- **無外部健康監控**：目前失敗只寫進本地 log 與 SQLite 的 `fail_count`，沒有主動通知你。等前 4 個來源跑穩後，可以加一支獨立的「健康檢查 Webhook」，在連續失敗達 `FAIL_THRESHOLD`（目前設 3 次）時推播告警。
+- **JS 動態渲染頁面**：`requests` 只拿到伺服器回傳的原始 HTML，不會執行 JavaScript。如果某來源的資料是靠前端 JS 抓 API 填進去的，`requests+BeautifulSoup` 會抓空，需改用 Playwright 渲染後再解析。
+- **排程靠 Windows Task Scheduler**：不是 cron/anacron(那是Linux慣例，本專案跑在Windows)，見`scripts/setup_scheduled_tasks.ps1`。主機關機期間錯過的排程不會自動補跑。
+- **健康監控**：抓取失敗記在本地 log 與 SQLite 的 `fail_count`(見`scrapers/health.py`)，連續失敗達門檻時個別來源會在 log 標記，沒有另外接外部告警管道。
 
 ## GitHub 自動備份
 
@@ -117,9 +96,9 @@ intel-pusher/
     └── setup_scheduled_tasks.ps1   # 建立Windows Task Scheduler排程(需系統管理員)
 ```
 
-## ���ηj�M�]�s AI�^
-���Ψӷ����۰ʲq���F�H `RENTAL_FEED_URLS` ���T�C�X�w����v�� RSS�BJSON �� HTML �ӷ��C�i�� `RENTAL_AREAS`�B`RENTAL_MAX_MONTHLY`�B`RENTAL_MIN_PING`�B`RENTAL_KEYWORDS`�B`RENTAL_EXCLUDE` �z��C
-�]�w `WEBHOOK_RENTAL_SEARCH` ����� `python main.py --source rental_search`�F���]�w�ӷ��ɷ|�w���a�O�������t�m�A���|������������C
+## 租屋搜尋（零 AI）
+租屋來源不自動猜測；以 `RENTAL_FEED_URLS` 明確列出已獲授權的 RSS、JSON 或 HTML 來源。可用 `RENTAL_AREAS`、`RENTAL_MAX_MONTHLY`、`RENTAL_MIN_PING`、`RENTAL_KEYWORDS`、`RENTAL_EXCLUDE` 篩選。
+設定 `WEBHOOK_RENTAL_SEARCH` 後執行 `python main.py --source rental_search`；未設定來源時會安全地記錄為未配置，不會抓取未知網站。
 
 來源目錄另收錄臺北市、新北市政府開放資料、國家住宅及都市更新中心與新北住都中心公告；各來源先經 PENDING_REVIEW，確認實際下載端點與欄位後才啟用。
 

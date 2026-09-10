@@ -20,10 +20,16 @@ DESCRIPTION，SUMMARY目前沒有，但仍做防禦性unescape以免未來新增
 """
 from __future__ import annotations
 
+import json
+import logging
+import os
 import re
 from datetime import date, datetime, timedelta
+from pathlib import Path
 
 from scrapers.http_client import get
+
+logger = logging.getLogger("scrapers.thu_calendar")
 
 SOURCE_NAME = "東海大學行事曆"
 SOURCE_ID = "thu_calendar"
@@ -33,10 +39,52 @@ ICS_URL = (
     "qpejvbuas1qpq9ugasigipgvjs%40group.calendar.google.com/public/basic.ics"
 )
 
+_CONFIG_DIR = Path(__file__).resolve().parent.parent / "config"
+_EXCLUDE_PATH = _CONFIG_DIR / "thu_calendar_exclude.json"
+
 _SEMESTER_START_RE = re.compile(r"^(\d+)\s*學年度第\s*([12])\s*學期開始$")
+_SEMESTER_BOUNDARY_RE = re.compile(r"^\d+\s*學年度第\s*[12]\s*學期(開始|終了)$")
 _DTSTART_RE = re.compile(r"^DTSTART(?:;[^:\n]*)?:(\d{8})", re.MULTILINE)
 _DTEND_RE = re.compile(r"^DTEND(?:;[^:\n]*)?:(\d{8})", re.MULTILINE)
 _SUMMARY_RE = re.compile(r"^SUMMARY:(.*)$", re.MULTILINE)
+
+_exclude_keywords_cache: list[str] | None = None
+
+
+def _load_exclude_keywords() -> list[str]:
+    """讀config/thu_calendar_exclude.json，攤平成單一關鍵字清單(子字串
+    比對，比照scholarship_util.py/internship_util.py既有的排除詞慣例)。"""
+    global _exclude_keywords_cache
+    if _exclude_keywords_cache is not None:
+        return _exclude_keywords_cache
+    try:
+        with open(_EXCLUDE_PATH, encoding="utf-8") as f:
+            raw = json.load(f)
+    except Exception as e:
+        logger.warning("讀取排除詞設定失敗 %s: %s，本次不排除任何事件", _EXCLUDE_PATH, e)
+        _exclude_keywords_cache = []
+        return _exclude_keywords_cache
+
+    keywords = []
+    for key, value in raw.items():
+        if key.startswith("_") or not isinstance(value, list):
+            continue
+        keywords.extend(value)
+    _exclude_keywords_cache = keywords
+    return keywords
+
+
+def invalidate_cache():
+    """外部(main.py)在每次執行前呼叫，確保排除詞設定變更即時生效。"""
+    global _exclude_keywords_cache
+    _exclude_keywords_cache = None
+
+
+def is_relevant_to_students(title: str) -> bool:
+    """排除明確屬於教職員行政會議/教職員專屬活動/全校設施維護/校友或公開
+    慶典類的事項(使用者2026-09-10確認「只要推播與在學學生明確相關的」)；
+    其餘一律視為相關，不做未經確認的臆測式二次篩選。"""
+    return not any(kw in title for kw in _load_exclude_keywords())
 
 
 def _unescape_ics_text(value: str) -> str:
@@ -114,7 +162,14 @@ def get_current_semester_calendar(today: date | None = None) -> dict:
         next_start = current_start + timedelta(days=180)
 
     selected = sorted(
-        (e for e in events if current_start <= e["start"] < next_start),
+        (
+            e for e in events
+            if current_start <= e["start"] < next_start
+            # 學期起訖標記本身已經反映在semester/range_start/range_end
+            # 欄位，events清單裡不重複列出。
+            and not _SEMESTER_BOUNDARY_RE.match(e["title"])
+            and is_relevant_to_students(e["title"])
+        ),
         key=lambda e: e["start"],
     )
 

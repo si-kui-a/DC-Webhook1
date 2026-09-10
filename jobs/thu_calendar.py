@@ -11,12 +11,14 @@ import json
 import logging
 
 from jobs.paths import THU_CALENDAR_PATH
+from scrapers import thu_calendar as thu_calendar_scraper
 from scrapers.thu_calendar import get_current_semester_calendar
 
 logger = logging.getLogger("main")
 
 
 def run_thu_calendar():
+    thu_calendar_scraper.invalidate_cache()  # 確保排除詞設定檔異動即時生效
     try:
         calendar = get_current_semester_calendar()
     except Exception as e:

@@ -72,6 +72,14 @@ add_thu_calendar_task.ps1`)，每天06:00、pythonw.exe執行
 開始/終了)本身已經反映在semester/range_start/range_end欄位，events
 清單裡不再重複列出。
 
+**再收斂(2026-09-10同日補充，使用者確認「非新生、非外籍學生、非休退學」)**：
+`config/thu_calendar_exclude.json`再加3類——`new_student_only`(新生)、
+`international_student_only`(境外/僑生/外籍)、`leave_or_withdrawal`
+(休學/退學，兩個關鍵字缺一不可：「休退學」不包含連續子字串「休學」，
+只列一個會漏篩另一種寫法)。47筆→35筆。刻意不動「退選」「停修」相關
+事項——課程加退選/停修是學生仍在學狀態下的課程異動，跟「休退學」(學籍
+狀態異動)是不同概念，沒有理由一併排除。
+
 ## 財經預設bot(TELEGRAM_BOT_TOKEN)停擺調查
 
 **現況**：`.env`裡`TELEGRAM_BOT_TOKEN`目前是空的，`TELEGRAM_CHAT_ID`還

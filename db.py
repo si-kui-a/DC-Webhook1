@@ -2,8 +2,10 @@
 db.py — SQLite 存取層。
 不用 ORM：資料量小（週報/月報頻率），直接 sqlite3 標準庫即可，減少依賴。
 """
+import re
 import sqlite3
 import hashlib
+import unicodedata
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -49,9 +51,19 @@ def get_source(source_id: str) -> dict | None:
     return dict(row) if row else None
 
 
+def _normalize_for_dedup(text: str) -> str:
+    """PAT-27：docstring原本就宣稱「避免空白/全半形差異造成重複推播」，
+    但實作只有.strip()(掐頭去尾)，沒有真的處理內部連續空白或全半形——
+    PAT-06已經記過cbc同一篇文章的RSS標題會有全半形標點差異，這個落差
+    會讓同一篇文章因為標點寬度不同被當成兩篇不同項目重複推播。這裡才是
+    docstring原本承諾的正規化：NFKC轉換(全形英數字/標點→半形)+內部
+    連續空白壓成單一空白，跟一旁strip()疊加使用。"""
+    return re.sub(r"\s+", " ", unicodedata.normalize("NFKC", text)).strip()
+
+
 def make_dedup_key(source_id: str, title: str, url: str) -> str:
     """去重鍵：來源 + 標題 + URL 正規化後雜湊。標題正規化可避免空白/全半形差異造成重複推播。"""
-    normalized = f"{source_id}|{title.strip()}|{url.strip()}"
+    normalized = f"{source_id}|{_normalize_for_dedup(title)}|{_normalize_for_dedup(url)}"
     return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
 
 

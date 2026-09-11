@@ -13,8 +13,9 @@ Apple走Atom格式(<feed><entry>)，其餘3家為標準RSS 2.0(<channel><item>)�
 共用一支通用scraper(比照scrapers/substack_generic.py的設定檔驅動模式)。
 """
 import xml.etree.ElementTree as ET
+from datetime import date
 
-import requests
+from scrapers import http_client
 
 ATOM_NS = "{http://www.w3.org/2005/Atom}"
 
@@ -83,7 +84,10 @@ def _parse_rss(root, source_id: str, source_name: str) -> list[dict]:
 
 
 def fetch_feed(source_id: str, source_name: str, feed_url: str, is_atom: bool) -> list[dict]:
-    resp = requests.get(feed_url, headers=HEADERS, timeout=15)
+    # PAT-26：比照tsmc.py/etf0050.py等其餘來源改走http_client(有429/5xx
+    # 重試退避)，這支是2026-07-30(http_client 08-09才新增)寫的，
+    # 一直沒跟著遷移，單次暫時性錯誤就直接判定抓取失敗。
+    resp = http_client.get(feed_url, headers=HEADERS, timeout=15)
     resp.raise_for_status()
     root = ET.fromstring(resp.content)
     return _parse_atom(root, source_id, source_name) if is_atom else _parse_rss(root, source_id, source_name)
@@ -96,8 +100,11 @@ def fetch_all() -> list[dict]:
         try:
             all_items.extend(fetch_feed(source_id, source_name, feed_url, is_atom))
         except Exception as e:
+            # PAT-24：title要帶當天日期，否則title+url(url是靜態feed網址)
+            # 的dedup_key每天都一樣，第二天起會被db.insert_item_if_new()
+            # 當成「已推播過」吞掉，真正持續中的抓取失敗只會被看到一次。
             all_items.append({
-                "title": f"{source_name} - 抓取失敗",
+                "title": f"{source_name} - 抓取失敗（{date.today().isoformat()}）",
                 "summary": f"無法取得資料：{e}",
                 "url": feed_url,
                 "published_at": None,

@@ -23,10 +23,12 @@ Identifier問題，但這只在查詢網址欄位時用到，各公司官網本�
 另外處理；這裡選擇讓summarize_fn回傳None，不逐篇抓詳情頁)。
 """
 import re
+from datetime import date
 from urllib.parse import urljoin
 
-import requests
 from bs4 import BeautifulSoup
+
+from scrapers import http_client
 
 HEADERS = {
     "User-Agent": (
@@ -41,7 +43,7 @@ def _fetch_ase() -> list[dict]:
     (中文版/ch/press-room疑似同架構但未逐一比對，先用英文版)。"""
     source_id, source_name = "semi_tw.ase", "日月光投控-新聞"
     base_url = "https://www.aseglobal.com"
-    resp = requests.get(f"{base_url}/press-room", headers=HEADERS, timeout=15)
+    resp = http_client.get(f"{base_url}/press-room", headers=HEADERS, timeout=15)
     resp.raise_for_status()
     soup = BeautifulSoup(resp.text, "html.parser")
 
@@ -72,7 +74,7 @@ def _fetch_kyec() -> list[dict]:
     """2449 京元電子。"""
     source_id, source_name = "semi_tw.kyec", "京元電子-新聞中心"
     base_url = "https://www.kyec.com.tw"
-    resp = requests.get(f"{base_url}/zh-tw/News", headers=HEADERS, timeout=15)
+    resp = http_client.get(f"{base_url}/zh-tw/News", headers=HEADERS, timeout=15)
     resp.raise_for_status()
     soup = BeautifulSoup(resp.text, "html.parser")
 
@@ -97,7 +99,7 @@ def _fetch_gptc() -> list[dict]:
     """3131 弘塑科技。"""
     source_id, source_name = "semi_tw.gptc", "弘塑科技-新聞中心"
     base_url = "https://www.gptc.com.tw"
-    resp = requests.get(f"{base_url}/news/", headers=HEADERS, timeout=15)
+    resp = http_client.get(f"{base_url}/news/", headers=HEADERS, timeout=15)
     resp.raise_for_status()
     soup = BeautifulSoup(resp.text, "html.parser")
 
@@ -122,7 +124,7 @@ def _fetch_allring() -> list[dict]:
     """6187 萬潤科技。"""
     source_id, source_name = "semi_tw.allring", "萬潤科技-新聞公告"
     base_url = "https://www.allring-tech.com.tw"
-    resp = requests.get(f"{base_url}/news.htm", headers=HEADERS, timeout=15)
+    resp = http_client.get(f"{base_url}/news.htm", headers=HEADERS, timeout=15)
     resp.raise_for_status()
     soup = BeautifulSoup(resp.text, "html.parser")
 
@@ -148,7 +150,7 @@ def _fetch_gudeng() -> list[dict]:
     跟半導體供應鏈頻道的重大訊息屬性較貼近。"""
     source_id, source_name = "semi_tw.gudeng", "家登精密-重大訊息"
     base_url = "https://www.gudeng.com"
-    resp = requests.get(f"{base_url}/Message?itemid=24&mid=89", headers=HEADERS, timeout=15)
+    resp = http_client.get(f"{base_url}/Message?itemid=24&mid=89", headers=HEADERS, timeout=15)
     resp.raise_for_status()
     soup = BeautifulSoup(resp.text, "html.parser")
 
@@ -185,7 +187,7 @@ def _fetch_scientech() -> list[dict]:
     清洗做法。"""
     source_id, source_name = "semi_tw.scientech", "辛耘企業-最新消息"
     base_url = "https://www.scientech.com.tw"
-    resp = requests.get(f"{base_url}/zh-hant/PressCenter/News/LatestNews", headers=HEADERS, timeout=15)
+    resp = http_client.get(f"{base_url}/zh-hant/PressCenter/News/LatestNews", headers=HEADERS, timeout=15)
     resp.raise_for_status()
     soup = BeautifulSoup(resp.text, "html.parser")
 
@@ -213,7 +215,7 @@ def _fetch_kinik() -> list[dict]:
     不需要BeautifulSoup解析HTML。"""
     source_id, source_name = "semi_tw.kinik", "中砂-新聞中心"
     base_url = "https://www.kinik.com.tw"
-    resp = requests.get(f"{base_url}/APIHtml/news/tw", headers=HEADERS, timeout=15)
+    resp = http_client.get(f"{base_url}/APIHtml/news/tw", headers=HEADERS, timeout=15)
     resp.raise_for_status()
     data = resp.json()
 
@@ -259,8 +261,12 @@ def fetch_all() -> list[dict]:
         try:
             all_items.extend(fetch_fn())
         except Exception as e:
+            # PAT-24：title/url必須帶當天日期，否則title(靜態)+url("")的
+            # dedup_key每天都一樣，db.insert_item_if_new()第二天起會把
+            # 失敗當成「已推播過」直接吞掉——真正的抓取中斷只會被看到
+            # 一次，之後就靜默消失，見db.py make_dedup_key()。
             all_items.append({
-                "title": f"{name}({code}) - 抓取失敗",
+                "title": f"{name}({code}) - 抓取失敗（{date.today().isoformat()}）",
                 "summary": f"無法取得資料：{e}",
                 "url": "",
                 "published_at": None,

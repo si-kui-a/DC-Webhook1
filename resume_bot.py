@@ -15,10 +15,13 @@ CLI版見resume_matcher.py的__main__)。
 3. RESUME_BOT_CHANNEL_ID(獨立頻道"履歷配對顧問")。
 
 使用者2026-07-31確認：走專屬頻道而非DM(原設計是DM，使用者改要頻道互動)。
-履歷內容屬PII(比照專案既有my_resume.json/academic_progress.md的PII
-處理原則)，只在RESUME_BOT_CHANNEL_ID這個頻道回應，忽略其餘頻道與DM的
-訊息，該頻道的可見範圍(只限本人/信任對象)由使用者自行在Discord伺服器
-權限設定管控，不是這支程式的責任範圍。
+履歷內容屬PII——2026-09-11查證更正：my_resume.json/academic_progress.md
+其實是另一個專案的殘留設定，這個repo本身從未有過這兩個檔案(見
+encrypt_backup.py/README.md「PII_FILES目前是空的」)，這裡沒有既有
+前例可比照，是獨立訂定的處理原則：只在RESUME_BOT_CHANNEL_ID這個頻道
+回應，忽略其餘頻道與DM的訊息，履歷文字不落地儲存、finally區塊確保
+暫存檔案清除，該頻道的可見範圍(只限本人/信任對象)由使用者自行在
+Discord伺服器權限設定管控，不是這支程式的責任範圍。
 
 使用方式(兩種模式，使用者2026-07-31確認新增模式2)：
 1. DB比對模式：上傳履歷檔案(pdf/docx/txt/md)，或直接貼履歷內容文字

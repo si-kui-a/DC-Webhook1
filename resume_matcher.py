@@ -60,8 +60,10 @@ TIMEOUT_SECONDS = 30
 # 避免超長履歷(含雜訊/重複格式化字元)把prompt灌爆，前6000字已足夠代表
 # 履歷主要內容(比照ai_insight.py其餘函式對輸入長度的節制原則)。
 MAX_RESUME_CHARS = 6000
-# 比照scrapers/us_customer_feeds.py的容量考量，目前published職缺數量少
-# (實測10筆),50這個上限留有餘裕，不會不夠用。
+# 2026-09-11查證更正：scrapers/us_customer_feeds.py沒有任何容量/上限
+# 相關設計，上面原本的引用是誤植(找不到對應來源，可能是草稿階段的
+# 誤貼)。50這個上限本身沒有問題——目前published職缺數量少(實測10筆)，
+# 留有餘裕，不會不夠用，只是移除錯誤的引用來源。
 MAX_POSTINGS = 50
 
 FETCH_HEADERS = {

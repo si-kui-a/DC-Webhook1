@@ -9,7 +9,14 @@ jobs:
   python-quality:
     runs-on: ubuntu-latest
     steps:
+      # PAT-28：fetch-depth:0——原本預設shallow(只抓1個commit)，讓最後一步
+      # 「git diff --check」(不帶任何ref引數)永遠只比對working tree跟
+      # 目前checkout那個commit的index，兩者checkout後必然相同，這個檢查
+      # 對任何PR的實際改動都是恆真通過，從沒真的擋過任何一次whitespace
+      # 問題。要完整歷史才能對真正的base/前一個commit做diff。
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -26,4 +33,13 @@ jobs:
           pip install pytest
           python -m pytest test/ tests/ -v
       - name: Patch whitespace
-        run: git diff --check
+        run: |
+          if [ -n "${{ github.event.pull_request.base.sha }}" ]; then
+            BASE="${{ github.event.pull_request.base.sha }}"
+          elif git rev-parse HEAD~1 >/dev/null 2>&1; then
+            BASE="HEAD~1"
+          else
+            echo "no base commit available to diff against (first commit on the branch?), skipping"
+            exit 0
+          fi
+          git diff --check "$BASE" HEAD

@@ -46,7 +46,12 @@ _SEMESTER_START_RE = re.compile(r"^(\d+)\s*學年度第\s*([12])\s*學期開始$
 _SEMESTER_BOUNDARY_RE = re.compile(r"^\d+\s*學年度第\s*[12]\s*學期(開始|終了)$")
 _DTSTART_RE = re.compile(r"^DTSTART(?:;[^:\n]*)?:(\d{8})", re.MULTILINE)
 _DTEND_RE = re.compile(r"^DTEND(?:;[^:\n]*)?:(\d{8})", re.MULTILINE)
-_SUMMARY_RE = re.compile(r"^SUMMARY:(.*)$", re.MULTILINE)
+# PAT-23：跟DTSTART/DTEND一樣容忍ICS參數字尾(如SUMMARY;LANGUAGE=zh-TW:)。
+# 2026-09-10抓的真實資料1687/1687行剛好都沒有參數，這條容忍度落差沒
+# 露餡，但ICS標準本來就允許任何欄位帶參數，只補DTSTART/DTEND沒補
+# SUMMARY是不對稱的——一旦某筆事件的SUMMARY帶參數，_SUMMARY_RE比對
+# 不到，fetch_raw_events()的if not summary_m會直接把整筆事件靜默丟掉。
+_SUMMARY_RE = re.compile(r"^SUMMARY(?:;[^:\n]*)?:(.*)$", re.MULTILINE)
 
 _filter_config_cache: dict | None = None
 

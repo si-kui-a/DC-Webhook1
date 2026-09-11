@@ -109,8 +109,11 @@ def _fetch(code: str, name: str) -> list[dict]:
                 "telegram_alert": False,
             })
     except requests.RequestException as e:
+        # PAT-24：title要帶今天日期，否則title+url(url是固定公司網址)
+        # 的dedup_key每天都一樣，第二天起會被db.insert_item_if_new()
+        # 當成「已推播過」吞掉，真正持續中的抓取失敗只會被看到一次。
         items.append({
-            "title": f"{name} 月營收抓取失敗",
+            "title": f"{name} 月營收抓取失敗（{today}）",
             "summary": f"無法取得TWSE月營收資料：{e}",
             "url": ref_url,
             "published_at": today,
@@ -132,7 +135,7 @@ def _fetch(code: str, name: str) -> list[dict]:
             })
     except requests.RequestException as e:
         items.append({
-            "title": f"{name} 財報抓取失敗",
+            "title": f"{name} 財報抓取失敗（{today}）",
             "summary": f"無法取得TWSE財報資料：{e}",
             "url": ref_url,
             "published_at": today,

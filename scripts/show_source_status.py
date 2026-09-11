@@ -13,6 +13,16 @@ Scheduler的事，查`Get-ScheduledTask -TaskName "IntelPusher-*"`，本腳本
 """
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+
+# PAT-29：跟scripts/check_links.py同一個坑——用`python scripts/
+# show_source_status.py`這種(這支腳本自己docstring暗示的)自然呼叫方式
+# 執行時，sys.path[0]是scripts/不是repo根目錄，repo根目錄的jobs套件
+# 直接ModuleNotFoundError，2026-09-10新增時沒補這行，check_links.py
+# 已經有的修法沒有跟著套用過去。
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
 from jobs.engine import SOURCE_REGISTRY
 from jobs.digest import DIGEST_CHANNELS
 from jobs.meta_summary import META_SUMMARY_CHANNELS

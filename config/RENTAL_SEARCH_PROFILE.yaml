@@ -1,4 +1,13 @@
-﻿version: 1
+﻿# 2026-09-11查證：這份檔案目前完全沒有被scrapers/rental_search.py或任何
+# .py檔讀取(全repo grep零命中)。實際生效的設定只有RENTAL_FEED_URLS +
+# 直接讀取的RENTAL_AREAS/RENTAL_KEYWORDS/RENTAL_EXCLUDE/RENTAL_MAX_
+# MONTHLY/RENTAL_MIN_MONTHLY/RENTAL_ROOM_TYPES/RENTAL_MIN_PING/
+# RENTAL_COOKING_PREFERENCE這幾個環境變數(見rental_search.py docstring)。
+# 這份檔案描述的通勤時間篩選/女性學生房源目標/租補後有效租金這整套設計
+# 是尚未實作的規劃文件，不是生效中的設定——修改這裡不會改變任何行為。
+# 若要讓這裡真的生效，需要在rental_search.py新增讀取+套用這份yaml的
+# 邏輯，屬於新功能開發，不是本次bug修復範圍。
+version: 1
 anchor:
   name: 東海大學
   address: 台中市西屯區臺灣大道四段1727號

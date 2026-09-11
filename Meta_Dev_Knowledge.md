@@ -465,3 +465,168 @@ status語意不誠實；但若未來有功能誤用`status='new'`當作「待處
 `'new'`改成`'published'`(限定`source_id LIKE 'scholarship%' OR
 'internship%'` + `fetched_at`是今天，避免誤改到其他來源或其他日期的
 資料)。
+
+### [PAT-22] scholarship_util.py關鍵字比對沒有.lower()關鍵字，跟internship_util.py宣稱比照的行為不一致
+**背景**：2026-09-11全repo bug稽核，`find_mirror_drift.py`(跨repo共用
+工具，見cross-project-scripts)掃到`internship_util.py:4`「比照
+scholarship_util.py的計分模式」，實際逐行比對兩邊`score_title()`/
+`get_matched_keywords()`才發現：internship_util.py正確`kw.lower() in
+text_lower`，scholarship_util.py只有`kw in title_lower`(kw沒轉小寫)。
+本檔案自己的`is_excluded_by_keywords()`也正確做了`kw.lower()`，形成
+同一檔案內兩套不一致的大小寫處理慣例。
+
+**根因**：目前`config/scholarship_keywords.json`的22個英文關鍵字剛好
+全是小寫，巧合沒有露餡。若日後手動新增自然大寫的獎學金名稱關鍵字
+(如"DAAD"/"Erasmus"/"Fulbright"，這類專有名詞的複製貼上慣例通常是
+原樣大寫)，會被永久計分0分、完全篩不到，不會有任何錯誤訊息。
+
+**修復**：`score_title()`/`get_matched_keywords()`都補上`kw.lower()`。
+用假關鍵字"DAAD"實測：修復前score=0，修復後score=5(正確計分)。
+
+### [PAT-23] thu_calendar.py的_SUMMARY_RE沒有跟_DTSTART_RE/_DTEND_RE一樣容忍ICS參數字尾
+**背景**：`_DTSTART_RE`/`_DTEND_RE`都用`(?:;[^:\n]*)?`容忍
+`DTSTART;VALUE=DATE:`這種帶參數的ICS欄位寫法，`_SUMMARY_RE`只認裸
+`SUMMARY:`，沒有對稱處理。2026-09-10真實抓到的1687行剛好都沒帶參數，
+沒有露餡，但ICS標準本來就允許任何欄位帶參數(如`SUMMARY;LANGUAGE=
+zh-TW:`)，只有DTSTART/DTEND有防禦不對稱。
+
+**影響**：`fetch_raw_events()`用`if not start_m or not summary_m:
+continue`，一旦某筆真實事件的SUMMARY帶參數，會被靜默整筆丟棄，不會
+出現在行事曆或Discord提醒裡，沒有任何錯誤訊息。
+
+**修復**：`_SUMMARY_RE`同步補上`(?:;[^:\n]*)?`容忍度。實測驗證：
+`SUMMARY;LANGUAGE=zh-TW:期中考試週`修復前不匹配，修復後正確匹配並
+取出「期中考試週」文字。
+
+### [PAT-24] 抓取失敗佔位項目的title/url沒有日期，第二天起被dedup_key當成「已推播過」吞掉
+**背景**：`db.make_dedup_key()`只用source_id+title+url算hash，
+`semi_tw_suppliers.py`/`us_customer_feeds.py`/`twse_financials.py`
+的except區塊組出的失敗佔位項目，title是靜態文字(如「{name} 月營收
+抓取失敗」)、url是空字串或固定網址，兩者都不隨日期變化——同一個
+scraper連續多天失敗時，第二天起的dedup_key會跟第一天完全相同，
+`insert_item_if_new()`判定「已推播過」直接跳過，等於真正持續中的
+抓取中斷只會被看到一次，之後永遠靜默消失，沒有任何後續警示。
+
+**影響評估**：這3個檔案共9個except區塊都有這個問題，涵蓋TWSE營收/
+財報、7家半導體供應鏈公司網站、4個美股客戶新聞feed，是這次稽核裡
+影響面最廣的一個bug。
+
+**修復**：全部9處title加上當天日期(`{date.today().isoformat()}`)，
+讓每天的失敗有各自獨立的dedup_key。實測驗證：修復前同一組
+title+url跨兩天的dedup_key相同(True)，修復後不同(False)。
+
+### [PAT-25] us_customer_util.py關鍵字純substring比對，"ASIC"⊂"basic"誤判為相關新聞
+**背景**：`config/us_customer_keywords.json`的weights用`kw.lower()
+in text_lower`純substring比對(不像regex_weights已經用`\b`詞界)，
+"ASIC"是"basic"的substring，"chip"是任何含"chip"字串(含人名如"Chip
+Bergh")的substring。實測：「NVIDIA announces basic accessibility
+features...」誤判score=2(達門檻)、matched=['ASIC']；這篇文章跟半導體
+完全無關。
+
+**修復**：weights比對改用`\b`詞界正則(這份設定檔的22個weights鍵全部
+是英文字/片語，跟internship_util.py/scholarship_util.py那種中文
+substring比對情境不同，中文沒有天然詞界，這裡改用詞界是安全的)。
+實測驗證：ASIC⊂basic的誤判修復後score=0；TSMC/Foxconn等真陽性
+維持正確；"Taiwan Semiconductor"這類多字片語仍正常匹配。
+
+**殘留限制(刻意不動，需要真實樣本校準)**："chip"本身是常見英文人名
+(如"Chip Bergh")，詞界比對下"Chip"當獨立單字仍會誤中——這不是
+substring問題，是關鍵字本身語意過廣，詞界比對修不了，比照本檔案
+`_comment`已有的「刻意不加processor/GPU/AI裸字」原則，留給下次
+B+E式取樣校準判斷要不要拿掉，不單方面移除。
+
+### [PAT-26] semi_tw_suppliers.py/us_customer_feeds.py一直沒遷移到http_client共用重試機制
+**背景**：`http_client.py`(2026-08-09新增，429/5xx指數退避重試)新增
+當天，`etf0050.py`/`macro_fred.py`/`substack_generic.py`/`tsmc.py`/
+`twse_financials.py`就同批遷移過去，但`semi_tw_suppliers.py`(2026-07-30
+建立，早於http_client.py)跟`us_customer_feeds.py`(同樣2026-07-30)一直
+沒跟上，兩邊都用裸`requests.get()`，也沒有任何PAT條目說明這是刻意
+排除(對照`sig_content_watch.py`則有明確記過為什麼不用http_client)。
+
+**影響**：semi_tw_suppliers.py 7家公司+us_customer_feeds.py 4個feed，
+單次暫時性429/5xx直接判定抓取失敗(連帶觸發PAT-24)，其餘來源會先
+重試退避才判定失敗。
+
+**修復**：兩個檔案的`requests.get(...)`全部改成`http_client.get(...)`
+(from scrapers import http_client)，semi_tw_suppliers.py順便移除
+變得多餘的`import requests`。跑過完整test/ tests/測試套件確認無回歸。
+
+### [PAT-27] db.py make_dedup_key()的docstring承諾的正規化沒有真的實作
+**背景**：docstring寫「標題正規化可避免空白/全半形差異造成重複推播」，
+實作卻只有`.strip()`(掐頭去尾)，PAT-06已經記過cbc的RSS標題會有全
+半形標點差異，內部連續空白差異(如爬蟲抓到的格式微幅不同)也完全沒
+處理。實測：同一篇文章"台積電法說會(Q3)"跟"台積電法說會（Q3）"
+(全形括號)算出不同dedup_key，會被當成兩篇不同文章各推播一次。
+
+**修復**：新增`_normalize_for_dedup()`，做`unicodedata.normalize
+("NFKC", text)`(全形轉半形)+連續空白壓成單一空白，title跟url都套用。
+實測驗證：全半形差異、內部空白差異都能正確歸為同一個dedup_key；
+真正不同的標題仍維持不同key(沒有過度合併)。
+
+**已知影響**：這是雜湊演算法變更，部署當下已經存在db.data.db裡的
+舊dedup_key不會回溯更新——如果同一篇文章剛好在部署前後各被抓到一次，
+理論上會有一次性的「當成新文章重推」風險，之後就會恢復正常去重。
+沒有回填舊資料，影響範圍小、機率低，不特別處理。
+
+### [PAT-28] CI quality.yml的「Patch whitespace」步驟從一開始就是恆真通過，沒真的擋過任何PR
+**背景**：`git diff --check`(不帶任何引數)在剛checkout完的乾淨working
+tree上執行，永遠是working tree跟index相同，恆定0行差異，回傳exit 0。
+這一步從加入quality.yml以來，不管實際PR/push有沒有引入trailing
+whitespace，永遠顯示綠燈。
+
+**修復**：checkout補上`fetch-depth: 0`(這個repo才680KB，全歷史成本
+可忽略，不像wedding-marketing-archive那種要另外用blob:none過濾)，
+改成依事件類型比對正確的base：pull_request用`github.event.pull_
+request.base.sha`，push則用`HEAD~1`(第一個commit的edge case優雅
+跳過而非報錯)。實測驗證：故意commit一行含trailing whitespace的
+測試檔，修復前的寫法(`git diff --check`)恆常exit 0；修復後的寫法
+正確抓到並回傳exit 2，測試完立刻reset移除測試commit。
+
+### [PAT-29] scripts/show_source_status.py用自然呼叫方式會ModuleNotFoundError
+**背景**：2026-09-10新增，用`python scripts/show_source_status.py`
+(自己docstring暗示的用法)執行時，sys.path[0]是scripts/不是repo
+根目錄，`from jobs.engine import ...`直接ModuleNotFoundError。同目錄
+的`check_links.py`早就有`sys.path.insert(0, str(Path(__file__).
+resolve().parents[1]))`這行修法，新增show_source_status.py時沒有
+比照套用。
+
+**修復**：補上跟check_links.py同一行sys.path修正，補在import jobs.*
+之前。實測驗證：修復前ModuleNotFoundError，修復後正常印出完整
+來源狀態表。
+
+### [PAT-30] publish_mechanical_change.py算出base_branch後沒有真的使用，寫死checkout main
+**背景**：`base_branch = "main" if branch in ("main", "master", "")
+else branch`算出來後，接下來的`git checkout`/print訊息都寫死"main"，
+變數本身是死碼(grep全檔案只出現這一行)。目前這個repo預設分支真的是
+main，沒有露餡，但如果從一個以其他分支名稱(非main/master)開始執行
+這支腳本，merge完會被強制帶回main，跟原本所在的分支不同步，且不會
+有任何錯誤提示。
+
+**修復**：`git checkout main`跟print訊息都改用`base_branch`變數。
+
+### [PAT-補充] resume_bot.py/resume_matcher.py兩處引用不存在的「既有前例」，屬文件/註解漂移非功能bug
+**背景**：`resume_bot.py`docstring說履歷PII處理「比照專案既有
+my_resume.json/academic_progress.md的PII處理原則」，但`encrypt_
+backup.py`/`README.md`都明確記載這兩個檔案「是另一個專案的殘留設定，
+intel-pusher本身從未有過」——引用了一個不存在的前例。`resume_matcher.
+py`的`MAX_POSTINGS = 50`註解說「比照scrapers/us_customer_feeds.py的
+容量考量」，但us_customer_feeds.py整份檔案完全沒有任何容量/上限相關
+設計或註解，找不到對應來源，疑似草稿階段誤貼。
+
+**修復**：兩處註解都改成誠實描述——resume_bot.py改成「這裡沒有既有
+前例可比照，是獨立訂定的處理原則」；resume_matcher.py改成「原本的
+引用是誤植，50這個上限本身沒有問題，只是移除錯誤的引用來源」。
+不影響任何實際行為，純文件正確性修正。
+
+### [PAT-補充2] RENTAL_SEARCH_PROFILE.yaml整份設計文件從未被程式讀取
+**背景**：`config/RENTAL_SEARCH_PROFILE.yaml`描述的通勤時間/女性學生
+房源目標/租補後有效租金整套篩選設計，全repo grep零命中——完全沒有
+任何.py檔讀取這份yaml或`.env.example`裡對應的9個環境變數(RENTAL_
+TARGET_ANCHOR等)。這是規劃文件，不是生效中的設定，修改這裡不會
+改變任何行為，但兩邊都沒有任何標註說明這一點，容易誤導後續維護者
+以為改了yaml/環境變數就會生效。
+
+**修復**：yaml檔案開頭跟.env.example對應區塊都補上明確註解，說明
+這套設計尚未實作、真正生效的變數是哪些。要讓這裡真的生效需要在
+rental_search.py新增讀取邏輯，屬於新功能開發，不在本次bug修復範圍，
+留給使用者之後決定是否要做。

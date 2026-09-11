@@ -124,7 +124,11 @@ def score_title(title: str) -> int:
     data = _load_keywords()
     weights = data.get("weights", {})
     title_lower = title.lower()
-    return sum(w for kw, w in weights.items() if kw in title_lower)
+    # PAT-22：kw也要.lower()，不能只轉title——目前weights全是小寫巧合
+    # 沒露餡，但跟internship_util.score_title()「宣稱比照」的行為其實
+    # 不一致(那邊kw.lower()跟title_lower都做了)，也跟本檔案自己的
+    # is_excluded_by_keywords()(kw.lower() in title_lower)不一致。
+    return sum(w for kw, w in weights.items() if kw.lower() in title_lower)
 
 
 def get_matched_keywords(title: str) -> list[str]:
@@ -133,7 +137,7 @@ def get_matched_keywords(title: str) -> list[str]:
     data = _load_keywords()
     weights = data.get("weights", {})
     title_lower = title.lower()
-    return [kw for kw in weights if kw in title_lower]
+    return [kw for kw in weights if kw.lower() in title_lower]
 
 
 def is_relevant(title: str, min_score: int | None = None) -> bool:

@@ -73,7 +73,8 @@ def main() -> int:
     entrypoint = None
     p = root / "PROJECT_PROFILE.yaml"
     if p.is_file():
-        for line in p.read_text(encoding="utf-8-sig", errors="replace").splitlines():
+        text = p.read_text(encoding="utf-8-sig", errors="replace").replace("`r`n", "\n")
+        for line in text.splitlines():
             if line.startswith("profile:"): profile = line.split(":", 1)[1].strip().strip("\"'")
             if line.startswith("AI_REQUIRED:"): args.ai_required = line.split(":", 1)[1].strip().lower() == "true"
             if line.startswith("entrypoint:"): entrypoint = line.split(":", 1)[1].strip().strip("\"'")

@@ -8,11 +8,20 @@ import ai_insight
 import db
 import index_dca_engine
 import price_feed
+import rule_engine
 from push_webhook import send_webhook
 import digest_format
 from jobs.paths import TAIWAN_TZ
 
 logger = logging.getLogger("main")
+
+# 模擬持倉決策引擎切換點(2026-08-04新增，使用者確認三帳戶改規則式進出場，
+# 2026-09-21從擱置47天的分支抽出重新套用到_extract_jobs.py搬過的現在
+# 這個位置)。"rules" = rule_engine.build_trade_decision()(SMA5/20交叉，
+# 零AI)；"ai" = ai_insight.build_trade_decision()(原本的Gemini自由判斷)。
+# 兩邊介面完全相容(同樣的輸入/輸出格式)，改這個常數就能整批切換，AI路徑
+# 刻意保留沒刪，之後想比較兩者表現或臨時切回去都不用改程式碼。
+DECISION_ENGINE = "rules"
 
 PORTFOLIO_CHANNELS = {
     "tw_stock_portfolio": {
@@ -175,9 +184,10 @@ def run_portfolio_channel(key: str):
             priced.update({k: v for k, v in tech.items() if k != "latest"})
         positions.append(priced)
 
-    decision = ai_insight.build_trade_decision(config["angle"], portfolio, positions, recent_trades, recent_reports, win_stats)
+    engine = rule_engine if DECISION_ENGINE == "rules" else ai_insight
+    decision = engine.build_trade_decision(config["angle"], portfolio, positions, recent_trades, recent_reports, win_stats)
     if not decision:
-        logger.error("[%s] Gemini決策失敗（額度用盡/網路錯誤/回應格式不對），本次跳過", key)
+        logger.error("[%s] %s決策失敗（額度用盡/網路錯誤/回應格式不對），本次跳過", key, DECISION_ENGINE)
         # AI is optional: preserve the deterministic core with a safe HOLD.
         logger.warning("[%s] AI unavailable; degrading to deterministic HOLD", key)
         decision = {

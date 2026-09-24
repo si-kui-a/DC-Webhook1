@@ -1,4 +1,4 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param(
   [Parameter(Mandatory=$true)][string]$Task,
   [Parameter(Mandatory=$true)][string]$Script,
@@ -27,6 +27,9 @@ try {
   if (-not (Test-Path $python)) { $python = 'python' }
   "run_id=$runId task=$Task commit=$sha start=$start" | Set-Content -LiteralPath $log -Encoding utf8
   $p = Start-Process -FilePath $python -ArgumentList (@($Script) + $Arguments) -WorkingDirectory $repo -NoNewWindow -PassThru -RedirectStandardOutput $stdout -RedirectStandardError $stderr
+  # Touch Handle right away: without a cached handle, ExitCode reads back empty
+  # after exit and [int] turns it into 0, so every failure was logged as success.
+  $null = $p.Handle
   if (-not $p.WaitForExit($TimeoutSeconds * 1000)) { $p.Kill(); throw "timeout after ${TimeoutSeconds}s" }
   $p.Refresh()
   $code = [int]$p.ExitCode

@@ -661,3 +661,12 @@ rss2json，本機直抓不變；rss2json內容較短但`_extract_free_preview()`
 **修復**：主要觸發改由Google Apps Script每小時打workflow_dispatch
 (`ops/gas_hourly_trigger.gs`)，schedule只留每天4次備援；
 `cloud_scheduler.py`用「當天補跑+每日最多一次成功」讓延遲/重複觸發都無害。
+
+### [PAT-34] Start-Process -PassThru沒先讀Handle，ExitCode永遠變0
+**背景**：`ops/run_task.ps1`用`Start-Process -PassThru`+`WaitForExit()`後讀
+`$p.ExitCode`，實測拿到空字串，`[int]`轉成0——CheckTriggers/CheckLinks/
+ResumeBot失敗全被記成`exit_code=0`(ResumeBot自08-14缺token每次都失敗，
+log卻一直顯示成功)。.NET要在程序結束前持有handle，事後才讀得到結束碼。
+
+**修復**：`Start-Process`後立刻`$null = $p.Handle`。以暫存失敗/成功腳本
+分別跑修改前後的run_task.ps1驗證：修改前失敗記0，修改後記1且程序exit 1。

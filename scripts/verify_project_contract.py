@@ -7,9 +7,21 @@ from pathlib import Path
 PROFILES = {"service-automation", "gui-media-tool", "content-archive", "web-platform", "ai-native", "governance-toolkit", "library-source", "automation-bot"}
 REQUIRED = ("display_name", "profile", "AI_REQUIRED", "offline_check", "run_command", "rollback", "owner")
 
-def parse(path: Path) -> dict[str, str]:
+def parse(path: Path) -> tuple[dict[str, str], bool]:
+    """Returns (data, had_backtick_rn_artifact). The second value used to be
+    silently swallowed here (2026-08-09's "normalize legacy profile newline
+    markers" fix tolerated a literal `r`n -- from a PowerShell string never
+    actually interpreted as a newline -- by replacing it with a real \\n
+    before parsing). That let this validator report SUCCESS on 6 repos whose
+    PROJECT_PROFILE.yaml had display_name and profile: glued onto the same
+    line (profile effectively unset) for 42+ days, because the in-memory
+    normalization masked the on-disk corruption instead of surfacing it.
+    Found and fixed on-disk in all 6 repos 2026-09-20/21; the caller now
+    treats this as a hard error instead of a silent pass so a repo can't sit
+    corrupted again just because this parser is lenient about reading it."""
     data: dict[str, str] = {}
     text = path.read_text(encoding="utf-8-sig")
+    had_artifact = "`r`n" in text
     text = text.replace("`r`n", "\n")
     for n, line in enumerate(text.splitlines(), 1):
         line = line.strip()
@@ -19,7 +31,7 @@ def parse(path: Path) -> dict[str, str]:
         if not m:
             raise ValueError(f"{path}:{n}: expected simple key: value")
         data[m.group(1)] = m.group(2).strip().strip('"').strip("'")
-    return data
+    return data, had_artifact
 
 def check_offline_check_reachable(offline_check: str, root: Path, errors: list[str]) -> None:
     """offline_check being a non-empty string only proves someone typed
@@ -47,12 +59,17 @@ def main() -> int:
     args = ap.parse_args()
     root = args.root.resolve(); profile_path = root / args.profile_file
     errors: list[str] = []; warnings: list[str] = []
+    data: dict[str, str]
     if not profile_path.is_file():
         errors.append(f"missing {args.profile_file}; copy templates/PROJECT_PROFILE.yaml")
         data = {}
     else:
-        try: data = parse(profile_path)
-        except (OSError, ValueError) as exc: errors.append(str(exc)); data = {}
+        try: data, had_artifact = parse(profile_path)
+        except (OSError, ValueError) as exc: errors.append(str(exc)); data = {}; had_artifact = False
+        if had_artifact:
+            errors.append(f"{args.profile_file} contains a literal `r`n artifact (PowerShell string never "
+                           f"interpreted as a newline, glues display_name and the next key onto one line) -- "
+                           f"fix the file on disk, don't rely on this parser's leniency to keep tolerating it")
     for key in REQUIRED:
         if not data.get(key): errors.append(f"missing or empty key: {key}")
     if data.get("profile") not in PROFILES: errors.append(f"profile must be one of: {', '.join(sorted(PROFILES))}")

@@ -1,0 +1,24 @@
+name: probe-cloud-reachability
+
+# One-off feasibility probe: do Taiwanese sources answer GitHub-hosted runner IPs?
+# Push-triggered on the feature branch only, so it never runs from main.
+on:
+  push:
+    branches: [feat/github-actions-scheduler]
+    paths:
+      - scripts/probe_cloud_reachability.py
+      - .github/workflows/probe-cloud-reachability.yml
+  workflow_dispatch:
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'  # match local venv; cert-chain strictness differs by version
+          cache: pip
+      - run: pip install -r requirements.txt
+      - run: python scripts/probe_cloud_reachability.py

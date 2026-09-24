@@ -54,7 +54,7 @@ def main() -> int:
             fn = getattr(importlib.import_module(mod_name), fn_name)
             result = f"OK n={len(fn())}"
         except Exception as e:  # report and continue; one dead source must not hide the rest
-            result = f"FAIL {type(e).__name__}: {str(e)[:150]}"
+            result = f"FAIL {type(e).__name__}: {str(e)[:400]}"
         print(f"{mod_name}.{fn_name}\t{time.monotonic() - start:.1f}s\t{result}", flush=True)
 
     import requests

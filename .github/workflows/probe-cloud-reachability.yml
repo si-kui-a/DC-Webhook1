@@ -18,7 +18,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.14'  # match local venv; cert-chain strictness differs by version
+          python-version: '3.12'  # 3.13+ enables VERIFY_X509_STRICT, which rejects TWCA gov certs (no SKI) on Linux
           cache: pip
       - run: pip install -r requirements.txt
       - run: python scripts/probe_cloud_reachability.py

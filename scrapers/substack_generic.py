@@ -12,8 +12,10 @@ scrapers/substack_generic.py — 通用 Substack RSS 抓取器。
 4. 不做額外長度上限截斷——抓到哪裡算哪裡,碰到付費牆就停止擷取
    (原本400字上限的做法已移除,見設計討論)
 """
+import os
 import re
 import xml.etree.ElementTree as ET
+from datetime import datetime
 from html import unescape
 
 import requests
@@ -86,21 +88,69 @@ def _extract_free_preview(raw_html: str) -> str:
     return re.sub(r"\s+", " ", text).strip()
 
 
+RSS2JSON_ENDPOINT = "https://api.rss2json.com/v1/api.json"
+
+
+def _is_cloudflare_challenge(exc: requests.HTTPError) -> bool:
+    resp = exc.response
+    return resp is not None and resp.status_code == 403 and resp.headers.get("cf-mitigated") == "challenge"
+
+
+def _raw_entries(feed_url: str) -> list[tuple[str, str, str, str]]:
+    """回傳(link, title, content_html, pubDate RFC822)。
+
+    Substack的Cloudflare會對雲端機房IP(GitHub Actions runner)直接回403
+    challenge，換UA/Accept/curl/curl_cffi都一樣被擋(2026-09-24在runner上
+    實測)；只有這種情況才改走rss2json(免key、每日1萬次、每feed最多10篇、
+    約1小時快取)。本機住宅IP照舊直抓，行為不變。rss2json的content欄位比
+    content:encoded短，但_extract_free_preview()切出來的結果實測逐篇相同。"""
+    try:
+        resp = http_client.get(feed_url, headers=HEADERS, timeout=15)
+    except requests.HTTPError as e:
+        if not _is_cloudflare_challenge(e):
+            raise
+        return _raw_entries_via_rss2json(feed_url)
+    root = ET.fromstring(resp.content)
+    return [
+        ((item.findtext("link") or "").strip(), (item.findtext("title") or "").strip(),
+         item.findtext(_CONTENT_ENCODED_TAG) or "", (item.findtext("pubDate") or "").strip())
+        for item in root.findall(".//item")
+    ]
+
+
+def _raw_entries_via_rss2json(feed_url: str) -> list[tuple[str, str, str, str]]:
+    # 不帶key時rss2json約連續10次就回429且數分鐘不解除(2026-09-24實測)，
+    # 20:00那輪4個digest共要打約11次，所以雲端要設RSS2JSON_API_KEY(免費帳號)；
+    # 帶key才能用count，順便拉到跟原feed一樣的20篇。
+    params = {"rss_url": feed_url}
+    api_key = os.getenv("RSS2JSON_API_KEY")
+    if api_key:
+        params.update(api_key=api_key, count="20")
+    resp = http_client.get(RSS2JSON_ENDPOINT, params=params, timeout=30)
+    data = resp.json()
+    if data.get("status") != "ok":
+        raise RuntimeError(f"rss2json: {data.get('message') or data.get('status')}")
+    entries = []
+    for item in data.get("items", []):
+        # rss2json把pubDate轉成"YYYY-MM-DD HH:MM:SS"(UTC)，轉回原feed的RFC822格式
+        # 讓下游parsedate_to_datetime照常運作。
+        try:
+            pub = datetime.strptime(item.get("pubDate", ""), "%Y-%m-%d %H:%M:%S").strftime("%a, %d %b %Y %H:%M:%S GMT")
+        except ValueError:
+            pub = ""
+        entries.append(((item.get("link") or "").strip(), (item.get("title") or "").strip(),
+                        item.get("content") or "", pub))
+    return entries
+
+
 def fetch_feed(source_id: str, source_name: str, feed_url: str) -> list[dict]:
     """抓單一Substack feed,回傳每篇文章的標題+免費預覽+連結。單篇解析
     失敗不中斷其他項目(比照既有scraper的容錯原則)。"""
-    resp = http_client.get(feed_url, headers=HEADERS, timeout=15)
-    resp.raise_for_status()
-    root = ET.fromstring(resp.content)
-
     results = []
-    for item in root.findall(".//item"):
-        link = (item.findtext("link") or "").strip()
-        title = (item.findtext("title") or "").strip()
+    for link, title, raw_html, published_at in _raw_entries(feed_url):
         if not link or not title:
             continue
 
-        raw_html = item.findtext(_CONTENT_ENCODED_TAG) or ""
         try:
             preview = _extract_free_preview(raw_html) if raw_html else ""
         except Exception:
@@ -110,7 +160,7 @@ def fetch_feed(source_id: str, source_name: str, feed_url: str) -> list[dict]:
             "title": title,
             "summary": preview or "（無可用預覽，可能為會員專屬內容）",
             "url": link,
-            "published_at": (item.findtext("pubDate") or "").strip(),
+            "published_at": published_at,
             "source_id": source_id,
             "source_name": source_name,
             "telegram_alert": False,

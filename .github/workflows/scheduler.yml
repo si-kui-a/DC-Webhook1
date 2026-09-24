@@ -1,0 +1,141 @@
+name: scheduler
+
+# Cloud replacement for the Windows IntelPusher-* scheduled tasks (except ResumeBot,
+# a long-lived Discord bot that Actions can't host). One hourly tick; which tasks
+# run is decided by scripts/cloud_scheduler.py (Taipei time, with same-day catch-up).
+#
+# State: data.db + work/ are restored from / saved to the Actions cache each tick
+# (cache storage is free; artifacts count against the 500MB free quota). A daily
+# artifact copy is kept as a backup in case the cache is evicted.
+#
+# Trigger: the hourly tick comes from an external cron calling the workflow_dispatch
+# API. GitHub's own schedule event is best-effort and since 2026-08-26 has run
+# 2-6 h late on this account (keyword-radar, content-health). The native cron below
+# is only a sparse safety net; the dispatcher's catch-up makes late/double ticks harmless.
+on:
+  schedule:
+    - cron: '43 1,7,13,19 * * *'  # fallback only; odd minute avoids top-of-hour congestion
+  workflow_dispatch:
+    inputs:
+      only:
+        description: 'Space-separated task names to run now (ignores the schedule). Empty = normal tick.'
+        required: false
+        default: ''
+      dry_run:
+        description: 'Print what would run; no scraping, no pushes, no state change.'
+        type: boolean
+        default: false
+      mark_done_today:
+        description: 'Cutover: mark tasks already due today as done without running them.'
+        type: boolean
+        default: false
+
+# One tick at a time, never cancelled: two runs restoring the same data.db
+# snapshot would each save a fork and one side's dedup/portfolio writes would be lost.
+concurrency:
+  group: ip-state
+  cancel-in-progress: false
+
+# data/thu_academic_calendar.json is not pushed back: nothing outside this job reads
+# it (grep over C:\Projects, 2026-09-24), so a bot commit to main every day buys nothing.
+permissions:
+  contents: read
+  actions: write   # prune old state caches
+
+env:
+  TZ: Asia/Taipei
+  PYTHONUTF8: '1'
+
+jobs:
+  tick:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55  # must finish before the next hourly tick
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'  # 3.13+ enables VERIFY_X509_STRICT, which rejects TWCA gov certs (no SKI) on Linux; CI tests run on 3.12 too
+          cache: pip
+
+      - run: pip install -r requirements.txt
+
+      - name: Write .env from secret
+        env:
+          DOTENV: ${{ secrets.DOTENV }}
+        run: |
+          if [ -z "$DOTENV" ]; then echo "::error::secret DOTENV is not set"; exit 1; fi
+          printf '%s\n' "$DOTENV" > .env
+
+      - name: Restore state
+        id: restore
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            data.db
+            work/
+          key: ip-state-${{ github.run_id }}
+          restore-keys: ip-state-
+
+      # First run only: take the seed uploaded from the local machine (draft release
+      # "state-seed"). Refuse to start from an empty DB -- dedup history would be gone
+      # and every source would re-push everything it has ever seen.
+      - name: Seed state if cache is empty
+        if: steps.restore.outputs.cache-matched-key == ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download state-seed --pattern 'state-seed.tar.gz' --dir /tmp \
+            || { echo "::error::no cached state and no state-seed release; refusing to start from an empty data.db"; exit 1; }
+          tar -xzf /tmp/state-seed.tar.gz
+          test -s data.db
+
+      - name: Dispatch
+        id: dispatch
+        continue-on-error: true  # state must still be saved when a task fails
+        env:  # inputs via env, never interpolated into the script text
+          ONLY: ${{ inputs.only }}
+          DRY_RUN: ${{ inputs.dry_run }}
+          MARK_DONE: ${{ inputs.mark_done_today }}
+        run: |
+          args=()
+          if [ -n "$ONLY" ]; then read -ra names <<< "$ONLY"; args+=(--only "${names[@]}"); fi
+          if [ "$DRY_RUN" = "true" ]; then args+=(--dry-run); fi
+          if [ "$MARK_DONE" = "true" ]; then args+=(--mark-done-today); fi
+          python scripts/cloud_scheduler.py "${args[@]}"
+
+      - name: Save state
+        if: always() && hashFiles('data.db') != ''
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            data.db
+            work/
+          key: ip-state-${{ github.run_id }}-${{ github.run_attempt }}
+
+      - name: Decide daily backup
+        id: backup
+        if: always()
+        run: echo "due=$([ "$(date +%H)" = "03" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+
+      - name: Daily state backup
+        if: always() && steps.backup.outputs.due == 'true' && hashFiles('data.db') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: state-backup-${{ github.run_id }}
+          path: |
+            data.db
+            work/
+          retention-days: 7
+
+      - name: Prune old state caches (keep newest 3)
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh cache list --key ip-state- --sort created_at --order desc --limit 100 --json id --jq '.[3:][].id' \
+            | xargs -r -n1 gh cache delete || true
+
+      - name: Fail if any task failed
+        if: steps.dispatch.outcome == 'failure'
+        run: exit 1

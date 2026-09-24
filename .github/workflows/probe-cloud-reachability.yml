@@ -1,0 +1,19 @@
+name: probe-cloud-reachability
+
+# Manual check: do the sources still answer GitHub-hosted runner IPs?
+# Run before changing the runner Python version or adding a source (see PAT-31/32).
+on:
+  workflow_dispatch:
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'  # 3.13+ enables VERIFY_X509_STRICT, which rejects TWCA gov certs (no SKI) on Linux
+          cache: pip
+      - run: pip install -r requirements.txt curl_cffi  # curl_cffi only for the probe
+      - run: python scripts/probe_cloud_reachability.py

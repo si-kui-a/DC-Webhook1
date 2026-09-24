@@ -58,6 +58,19 @@ def main() -> int:
         print(f"{mod_name}.{fn_name}\t{time.monotonic() - start:.1f}s\t{result}", flush=True)
 
     import requests
+    # substack_generic swallows per-feed errors into placeholder items; surface the
+    # real status, with the bot UA and with a browser UA, to tell IP blocks from UA blocks.
+    feed = "https://unclestocknotes.substack.com/feed"
+    for label, ua in (("bot-UA", "IntelPusher/0.2 (personal research bot)"),
+                      ("browser-UA", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                                     "(KHTML, like Gecko) Chrome/128.0 Safari/537.36")):
+        try:
+            r = requests.get(feed, headers={"User-Agent": ua}, timeout=20)
+            result = f"HTTP {r.status_code} server={r.headers.get('server')} cf-mitigated={r.headers.get('cf-mitigated')}"
+        except Exception as e:
+            result = f"FAIL {type(e).__name__}"
+        print(f"substack {label}\t-\t{result}", flush=True)
+
     for url in RAW_URLS:
         try:
             status = requests.get(url, timeout=20).status_code

@@ -46,7 +46,7 @@ python scripts/show_source_status.py
 
 ## GitHub 自動備份
 
-不使用 GitHub Actions（那是在 GitHub 雲端執行，違反本專案「全部依靠本地端運行」的原則）。改用本地 Windows Task Scheduler 觸發本地 `git push`（`backup.sh`），GitHub 只是異地儲存目的地。
+**2026-09-25 起 `backup.sh` 不再 commit/push**：pre-commit guard 擋下所有直接 commit 到 main，程式碼異動一律走 feature branch + PR 進 GitHub，夜間自動 commit 從未成功過（見 `docs/DECISIONS.md`）。`backup.sh` 只剩下方「含個資檔案」的加密步驟；以下設定步驟保留作歷史參考。
 
 ### 設定步驟（僅需一次）
 

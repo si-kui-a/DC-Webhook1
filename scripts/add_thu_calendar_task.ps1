@@ -1,9 +1,8 @@
 ﻿# 新增「東海大學當期學期行事曆合併」排程任務(2026-09-10建立)。
 # 取代原本教育類(scholarship/internship)的Telegram EDU bot通知——使用者
 # 2026-09-10確認拿掉那三個Telegram簡短通知，改成這支每天早上6點跑的job，
-# 把當期學期行事曆寫進data/thu_academic_calendar.json，交給backup.sh既有
-# 的每日自動git commit+push機制一併帶進版控(見backup.sh的git add清單，
-# 已於同次改動加入data/)。
+# 把當期學期行事曆寫進data/thu_academic_calendar.json(2026-09-25起不進
+# 版控，見docs/DECISIONS.md)。
 #
 # 用pythonw.exe(避免console彈窗，同realestate_report那次的教訓，見
 # CLAUDE.md「Windows Environment Notes」)。

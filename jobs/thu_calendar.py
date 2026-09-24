@@ -9,10 +9,8 @@ bot token/chat_id發自己的訊息(季排程，內容異常時才發)——同�
 
 兩件事各自獨立執行、互不影響：
 1. 把scrapers/thu_calendar.py抓到的當期學期事件寫成
-   data/thu_academic_calendar.json，交給backup.sh既有的每日自動git
-   commit+push機制一併帶進版控(見backup.sh的git add清單)。內容不含
-   產生時間戳，只有事件本身變動時才會讓git偵測到差異，避免每天固定
-   跑出無意義的auto backup commit。
+   data/thu_academic_calendar.json(本機檔，2026-09-25起不進版控，
+   見docs/DECISIONS.md)。
 2. 依scrapers/thu_calendar.py的get_reminder_trigger_dates()判斷「今天」
    是否有事項該提醒，有才發一則Telegram訊息(沒有就完全不推播，避免
    通知疲勞，比照sig_watch.py的既有慣例)。訊息內容除了今天要提醒的

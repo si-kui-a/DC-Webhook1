@@ -12,9 +12,13 @@ academic_progress.md
 my_resume.json
 
 logs/*.log
+logs/*.lock
 logs/runs/
 work/*.log
 work/source_health.json
+
+# 每天由jobs/thu_calendar.py重新產生，沒有其他程式讀它；進版控只會讓main每天變髒
+data/thu_academic_calendar.json
 
 # old scaffold kept for reference only, never committed
 _scaffold_backup/

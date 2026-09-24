@@ -1,19 +1,14 @@
 #!/bin/bash
-# backup.sh — 本地 cron 觸發，本地 git 指令 push 到 GitHub 私有倉庫。
-# GitHub 不執行任何運算，只作為異地儲存目的地，符合「最低算力本地運行」原則。
+# backup.sh — Windows Task Scheduler(IntelPusher-Backup)每晚觸發。
 #
-# 前置需求（僅需設定一次）：
-#   1. 已在此目錄執行過 `git init` 且已設定 remote origin（私有倉庫）
-#   2. 已設定 fine-grained PAT 或 SSH deploy key，且僅有該倉庫的 push 權限
+# 2026-09-25起只剩「加密含 PII 的檔案」一步(目前 PII_FILES 為空，等於不做事)。
+# 原本的 git add/commit/push 已移除：pre-commit guard 擋下所有直接 commit 到
+# main，程式碼異動一律走 feature branch + PR，夜間自動 commit 從來不會成功，
+# 舊寫法又把失敗吞掉、log 照寫「成功」(見 docs/DECISIONS.md 2026-09-25)。
+# .enc 檔若日後真的產生，跟其他異動一樣走 PR 進版控。
 #
-# 建議排程：本專案實際跑在 Windows Task Scheduler，見 scripts/setup_scheduled_tasks.ps1
-# (crontab.example 是早期規劃階段假設的部署方式，跟實際情況不符，已移除，見PAT-14)
-#
-# 兩份 log 用途明確分離（依 git push 的 exit code 判斷，不是看有沒有輸出內容——
-# git push 成功時也會把 ref 更新資訊寫到 stderr，用「有沒有輸出」判斷會誤把
-# 正常訊息當成錯誤）：
-#   logs/backup.log        每次執行都會有一行摘要（成功或失敗都記）
-#   logs/backup_errors.log 只有真正失敗時才會有內容；空檔案 = 從未失敗過
+#   logs/backup.log        每次執行一行摘要（成功或失敗都記）
+#   logs/backup_errors.log 只有真正失敗時才會有內容
 
 # 刻意不用 set -e：底下每一步都要能在失敗時把錯誤寫進 ERROR_LOG 再結束，
 # set -e 配合 var=$(cmd) 這種寫法，一旦 cmd 失敗會讓整支腳本立刻中止在那一行
@@ -42,67 +37,10 @@ if [ "$encrypt_exit" -ne 0 ]; then
         echo "[$(ts)] 失敗，加密步驟 encrypt_backup.py 錯誤"
         echo "$encrypt_output"
     } >> "$ERROR_LOG"
+    echo "[$(ts)] 失敗（加密步驟），詳見 logs/backup_errors.log" >> "$BACKUP_LOG"
     echo "[$(ts)] 備份失敗（加密步驟），詳見 logs/backup_errors.log"
     exit 1
 fi
 
-# 2. 只加入不含明碼個資的檔案；.env、data.db、原始 .md/.json 明碼版本
-#    透過 .gitignore 排除，此處不重複列出以免兩處清單不同步。
-#    intel-pusher 目前沒有 PII_FILES（見 encrypt_backup.py），所以沒有
-#    對應的 .enc 檔案要加；等這個專案真的產生個資檔案時再加進來。
-#    2026-07-31自我檢討發現這份清單長期落後於實際專案結構(ai_insight.py/
-#    digest_format.py/notify_telegram.py/price_feed.py/config//scripts//
-#    docs//CLAUDE.md都是既有git追蹤檔案但從未列在這裡)——這些檔案的異動
-#    只能靠手動commit才會進版控，夜間自動備份完全沒覆蓋到，一併補上。
-#    只 add 實際存在的路徑：git add 只要有一個 pathspec 不存在就整批不加，
-#    舊寫法的 `2>/dev/null || true` 會讓「刪掉清單上某個檔案」變成整晚靜默不備份。
-add_paths=(scrapers/ main.py db.py push_webhook.py encrypt_backup.py schema.sql
-           summarizer_zh.py summarizer_en.py ai_insight.py digest_format.py
-           notify_telegram.py price_feed.py config/ scripts/ docs/ jobs/
-           README.md requirements.txt backup.sh CLAUDE.md
-           .gitignore .env.example Meta_Dev_Knowledge.md Meta_User_Feedback.md)
-existing_paths=()
-for p in "${add_paths[@]}"; do
-    if [ -e "$p" ]; then existing_paths+=("$p"); else echo "[$(ts)] 提醒：備份清單路徑不存在，已略過：$p" >> "$BACKUP_LOG"; fi
-done
-git add -- "${existing_paths[@]}"
-
-# 3. 沒有暫存變更就不 commit（不產生空 commit）。有變更時 commit 失敗必須
-#    如實記錄：2026-09-24 發現 pre-commit guard 擋下「直接 commit 到 main」，
-#    舊寫法 `|| true` 把失敗吞掉，push 沒東西可推也回 0，log 照寫「成功」，
-#    暫存區卻一直留著沒 commit 的變更。
-commit_failed=0
-if ! git diff --cached --quiet; then
-    commit_output="$(git commit -m "auto backup $(ts)" 2>&1)"
-    if [ $? -ne 0 ]; then
-        commit_failed=1
-        {
-            echo "[$(ts)] 失敗，commit 被拒（暫存區變更仍未 commit）"
-            echo "$commit_output"
-        } >> "$ERROR_LOG"
-    fi
-fi
-
-# 4. push；用 exit code 判斷成功/失敗，push 的完整輸出先存起來，
-#    只有失敗時才寫進 backup_errors.log。刻意不用 set -e，這裡才是
-#    真正需要「失敗也要繼續往下走、把錯誤記下來」的地方。
-push_output="$(git push origin main 2>&1)"
-push_exit=$?
-commit_hash="$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
-
-if [ "$push_exit" -ne 0 ]; then
-    {
-        echo "[$(ts)] 失敗，commit=$commit_hash"
-        echo "$push_output"
-    } >> "$ERROR_LOG"
-fi
-
-# exit code 要反映真實結果：排程的 run_task.ps1 只看 exit code。
-if [ "$commit_failed" -eq 0 ] && [ "$push_exit" -eq 0 ]; then
-    echo "[$(ts)] 成功，commit=$commit_hash" >> "$BACKUP_LOG"
-    echo "[$(ts)] 備份完成並已推送（commit=$commit_hash）"
-    exit 0
-fi
-echo "[$(ts)] 失敗（commit_failed=$commit_failed push_exit=$push_exit），詳見 logs/backup_errors.log" >> "$BACKUP_LOG"
-echo "[$(ts)] 備份失敗，詳見 logs/backup_errors.log"
-exit 1
+echo "[$(ts)] 成功（僅加密步驟；程式碼備份走 PR 流程）" >> "$BACKUP_LOG"
+exit 0

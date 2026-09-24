@@ -58,8 +58,9 @@ jobs/*.py的異動完全沒被夜間自動備份覆蓋到，這次一併補上(�
 push沒東西可推也回0，log照寫「成功」；行事曆檔就一直以「已暫存、未commit」
 留在main上，連帶擋住guard的跨repo同步。查證結果：沒有任何程式讀這個檔
 (cot也沒有串接)，GitHub Actions版排程也刻意不推回。因此改列`.gitignore`
-、從backup.sh的`git add`清單移除`data/`，並讓backup.sh在commit被拒時如實
-寫進backup_errors.log、exit 1。日後若真有程式要讀，再改成由該程式直接抓
+。進一步查證：guard規則下backup.sh的commit步驟永遠不會成功(程式碼異動
+全走PR)，所以整段git add/commit/push從backup.sh移除，只保留PII加密步驟
+(PII_FILES目前為空)。日後若真有程式要讀行事曆，改成由該程式直接抓
 Google Calendar，不要恢復每天自動commit。
 
 **排程**：新增`IntelPusher-ThuCalendar`工作排程(`scripts/

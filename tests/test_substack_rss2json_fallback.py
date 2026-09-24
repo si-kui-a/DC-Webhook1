@@ -39,6 +39,24 @@ def test_cloudflare_challenge_uses_rss2json(monkeypatch):
     assert items[0]["published_at"] == "Thu, 24 Sep 2026 01:55:28 GMT"  # same format as the direct feed
 
 
+def test_api_key_is_sent_only_when_configured(monkeypatch):
+    seen = []
+
+    def fake_get(url, **kwargs):
+        if url == s.RSS2JSON_ENDPOINT:
+            seen.append(kwargs["params"])
+            return _Resp(payload=RSS2JSON_OK)
+        raise _http_error(403, {"cf-mitigated": "challenge"})
+
+    monkeypatch.setattr(s.http_client, "get", fake_get)
+    monkeypatch.delenv("RSS2JSON_API_KEY", raising=False)
+    s.fetch_feed("sid", "name", "https://x.substack.com/feed")
+    monkeypatch.setenv("RSS2JSON_API_KEY", "k")
+    s.fetch_feed("sid", "name", "https://x.substack.com/feed")
+    assert "api_key" not in seen[0]
+    assert seen[1]["api_key"] == "k" and seen[1]["count"] == "20"
+
+
 def test_plain_403_is_not_rerouted(monkeypatch):
     def fake_get(url, **kwargs):
         raise _http_error(403, {})

@@ -12,6 +12,7 @@ scrapers/substack_generic.py — 通用 Substack RSS 抓取器。
 4. 不做額外長度上限截斷——抓到哪裡算哪裡,碰到付費牆就停止擷取
    (原本400字上限的做法已移除,見設計討論)
 """
+import os
 import re
 import xml.etree.ElementTree as ET
 from datetime import datetime
@@ -118,7 +119,14 @@ def _raw_entries(feed_url: str) -> list[tuple[str, str, str, str]]:
 
 
 def _raw_entries_via_rss2json(feed_url: str) -> list[tuple[str, str, str, str]]:
-    resp = http_client.get(RSS2JSON_ENDPOINT, params={"rss_url": feed_url}, timeout=30)
+    # 不帶key時rss2json約連續10次就回429且數分鐘不解除(2026-09-24實測)，
+    # 20:00那輪4個digest共要打約11次，所以雲端要設RSS2JSON_API_KEY(免費帳號)；
+    # 帶key才能用count，順便拉到跟原feed一樣的20篇。
+    params = {"rss_url": feed_url}
+    api_key = os.getenv("RSS2JSON_API_KEY")
+    if api_key:
+        params.update(api_key=api_key, count="20")
+    resp = http_client.get(RSS2JSON_ENDPOINT, params=params, timeout=30)
     data = resp.json()
     if data.get("status") != "ok":
         raise RuntimeError(f"rss2json: {data.get('message') or data.get('status')}")

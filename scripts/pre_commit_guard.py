@@ -257,6 +257,31 @@ def check_bulk_deletion_needs_review(threshold: int = 3) -> bool:
     return True  # 只提醒，刪除是否合理需要人工判斷，不自動阻擋
 
 
+def check_commit_identity() -> bool:
+    # 2026-09-25: study-in-germany had a repo-local `User <user@example.com>` for 69 commits,
+    # none linked to any GitHub account. Only placeholder identities are blocked -- not a
+    # specific account, since repos here commit under more than one GitHub account.
+    result = subprocess.run(
+        ["git", "var", "GIT_AUTHOR_IDENT"], capture_output=True, text=True, encoding="utf-8"
+    )
+    ident = result.stdout.strip()
+    email = ident[ident.find("<") + 1:ident.find(">")].strip().lower() if "<" in ident else ""
+    domain = email.rpartition("@")[2]
+    placeholder = (
+        not email
+        or "@" not in email
+        or domain in ("example.com", "example.org", "example.net", "localhost")
+        or domain.endswith((".local", ".localdomain", ".invalid"))
+    )
+    if placeholder:
+        print(
+            f"[BLOCKED] commit作者身分是佔位值：{ident or '(未設定)'}。這樣的commit不會連到任何"
+            "GitHub帳號。檢查 git config user.name/user.email（含repo自己的--local設定）。"
+        )
+        return False
+    return True
+
+
 def main():
     ok = True
     ok &= check_not_main_branch()
@@ -264,6 +289,7 @@ def main():
     ok &= check_no_secret_files()
     ok &= check_staged_diff_for_secrets()
     ok &= check_no_unstaged_deletes()
+    ok &= check_commit_identity()
     check_draft_delivery_targets()
     check_bulk_deletion_needs_review()
     sys.exit(0 if ok else 1)

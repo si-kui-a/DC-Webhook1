@@ -630,3 +630,34 @@ TARGET_ANCHOR等)。這是規劃文件，不是生效中的設定，修改這裡
 這套設計尚未實作、真正生效的變數是哪些。要讓這裡真的生效需要在
 rental_search.py新增讀取邏輯，屬於新功能開發，不在本次bug修復範圍，
 留給使用者之後決定是否要做。
+
+### [PAT-31] Linux上Python 3.13+拒絕TWCA簽發的政府網站憑證(truststore救不了)
+**背景**：2026-09-24在GitHub Actions(ubuntu)用Python 3.14跑scraper，
+cbc/勞動部/青年署/教育部全部SSLCertVerificationError；同一份程式碼在
+本機Windows正常。憑證鏈本身完整(openssl s_client驗證OK)。原因是3.13起
+預設開`VERIFY_X509_STRICT`，TWCA憑證缺Subject Key Identifier被拒；
+Windows上`truststore`走CryptoAPI較寬鬆所以沒事，Linux上truststore
+仍用OpenSSL，嚴格旗標照樣生效。
+
+**修復**：雲端workflow固定用Python 3.12(跟quality.yml一致)，不在程式碼
+放寬驗證。之後要升級runner版本前，先跑`probe-cloud-reachability`確認。
+
+### [PAT-32] Substack對雲端機房IP一律Cloudflare challenge，換header/TLS都沒用
+**背景**：runner上`*.substack.com/feed`回`403 cf-mitigated=challenge`。
+實測無效：瀏覽器UA、RSS Accept、/feed.xml、curl、curl_cffi(Chrome TLS
+指紋)、/api/v1/archive、r.jina.ai。有效：自訂網域feed(maxcrypto.space)、
+假冒bingbot UA(不採用，冒充爬蟲繞防護且隨時會失效)、rss2json代抓。
+
+**修復**：`substack_generic`只在「403且cf-mitigated=challenge」時改走
+rss2json，本機直抓不變；rss2json內容較短但`_extract_free_preview()`
+結果逐篇相同。rss2json不帶key約10次就429且數分鐘不解，雲端需設
+`RSS2JSON_API_KEY`。
+
+### [PAT-33] GitHub Actions schedule事件不能當準時排程用
+**背景**：2026-08-26起帳號內`keyword-radar`(20:20 UTC)實際晚2–3小時、
+`content-health`晚5–6.4小時(`gh api .../runs?event=schedule`實測)；社群
+討論#207346至09-18仍未解。官方文件本來就寫schedule是best-effort。
+
+**修復**：主要觸發改由Google Apps Script每小時打workflow_dispatch
+(`ops/gas_hourly_trigger.gs`)，schedule只留每天4次備援；
+`cloud_scheduler.py`用「當天補跑+每日最多一次成功」讓延遲/重複觸發都無害。

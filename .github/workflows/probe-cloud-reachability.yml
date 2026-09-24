@@ -1,14 +1,8 @@
 name: probe-cloud-reachability
 
-# One-off feasibility probe: do Taiwanese sources answer GitHub-hosted runner IPs?
-# Push-triggered on the feature branch only, so it never runs from main.
+# Manual check: do the sources still answer GitHub-hosted runner IPs?
+# Run before changing the runner Python version or adding a source (see PAT-31/32).
 on:
-  push:
-    branches: [feat/github-actions-scheduler]
-    paths:
-      - scripts/probe_cloud_reachability.py
-      - scrapers/**
-      - .github/workflows/probe-cloud-reachability.yml
   workflow_dispatch:
 
 jobs:

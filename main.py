@@ -59,7 +59,6 @@ from scrapers import internship_mol
 from scrapers import internship_104
 from scrapers import internship_rich
 from scrapers import internship_yes123
-from scrapers import internship_gift
 from scrapers import internship_util
 from scrapers import sig_content_watch
 

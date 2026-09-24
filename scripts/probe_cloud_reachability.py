@@ -60,16 +60,46 @@ def main() -> int:
     import requests
     # substack_generic swallows per-feed errors into placeholder items; surface the
     # real status, with the bot UA and with a browser UA, to tell IP blocks from UA blocks.
-    feed = "https://unclestocknotes.substack.com/feed"
-    for label, ua in (("bot-UA", "IntelPusher/0.2 (personal research bot)"),
-                      ("browser-UA", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-                                     "(KHTML, like Gecko) Chrome/128.0 Safari/537.36")):
+    # Variants that other projects report working from GitHub runners.
+    chrome = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+              "(KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36")
+    rss_accept = "application/rss+xml, application/xml;q=0.9, text/xml;q=0.8, */*;q=0.5"
+    bing = "Mozilla/5.0 (compatible; bingbot/2.0; +http://www.bing.com/bingbot.htm)"
+    variants = [
+        ("requests bot-UA", "https://unclestocknotes.substack.com/feed", {"User-Agent": "IntelPusher/0.2"}),
+        ("requests chrome+rss-accept", "https://unclestocknotes.substack.com/feed",
+         {"User-Agent": chrome, "Accept": rss_accept}),
+        ("requests chrome+rss-accept /feed.xml", "https://unclestocknotes.substack.com/feed.xml",
+         {"User-Agent": chrome, "Accept": rss_accept}),
+        ("requests bingbot-UA", "https://unclestocknotes.substack.com/feed", {"User-Agent": bing}),
+        ("requests custom-domain maxcrypto", "https://www.maxcrypto.space/feed",
+         {"User-Agent": chrome, "Accept": rss_accept}),
+        ("requests api/v1/archive", "https://unclestocknotes.substack.com/api/v1/archive?sort=new&limit=5",
+         {"User-Agent": chrome, "Accept": "application/json"}),
+        ("daad chrome", "https://www2.daad.de/bundles/daadstipendiendatenbanklsh/data/a/js/scholarships.js",
+         {"User-Agent": chrome}),
+    ]
+    for label, url, headers in variants:
         try:
-            r = requests.get(feed, headers={"User-Agent": ua}, timeout=20)
-            result = f"HTTP {r.status_code} server={r.headers.get('server')} cf-mitigated={r.headers.get('cf-mitigated')}"
+            r = requests.get(url, headers=headers, timeout=20)
+            body = r.text[:60].replace("\n", " ")
+            result = f"HTTP {r.status_code} cf-mitigated={r.headers.get('cf-mitigated')} body={body!r}"
         except Exception as e:
             result = f"FAIL {type(e).__name__}"
-        print(f"substack {label}\t-\t{result}", flush=True)
+        print(f"{label}\t-\t{result}", flush=True)
+
+    # Same request through curl (different TLS stack) and curl_cffi (Chrome TLS fingerprint).
+    import subprocess
+    out = subprocess.run(["curl", "-s", "-o", "/dev/null", "-w", "%{http_code}", "-A", chrome,
+                          "-H", f"Accept: {rss_accept}", "https://unclestocknotes.substack.com/feed"],
+                         capture_output=True, text=True, timeout=30).stdout
+    print(f"curl chrome+rss-accept\t-\tHTTP {out}", flush=True)
+    try:
+        from curl_cffi import requests as cffi
+        r = cffi.get("https://unclestocknotes.substack.com/feed", impersonate="chrome", timeout=20)
+        print(f"curl_cffi impersonate=chrome\t-\tHTTP {r.status_code} body={r.text[:60]!r}", flush=True)
+    except ImportError:
+        print("curl_cffi\t-\tnot installed", flush=True)
 
     for url in RAW_URLS:
         try:

@@ -54,17 +54,34 @@ fi
 #    digest_format.py/notify_telegram.py/price_feed.py/config//scripts//
 #    docs//CLAUDE.md都是既有git追蹤檔案但從未列在這裡)——這些檔案的異動
 #    只能靠手動commit才會進版控，夜間自動備份完全沒覆蓋到，一併補上。
-git add scrapers/ main.py db.py push_webhook.py encrypt_backup.py schema.sql \
-        summarizer_zh.py summarizer_en.py ai_insight.py digest_format.py \
-        notify_telegram.py price_feed.py config/ scripts/ docs/ jobs/ \
-        data/ README.md requirements.txt backup.sh CLAUDE.md \
-        .gitignore .env.example Meta_Dev_Knowledge.md Meta_User_Feedback.md 2>/dev/null || true
+#    只 add 實際存在的路徑：git add 只要有一個 pathspec 不存在就整批不加，
+#    舊寫法的 `2>/dev/null || true` 會讓「刪掉清單上某個檔案」變成整晚靜默不備份。
+add_paths=(scrapers/ main.py db.py push_webhook.py encrypt_backup.py schema.sql
+           summarizer_zh.py summarizer_en.py ai_insight.py digest_format.py
+           notify_telegram.py price_feed.py config/ scripts/ docs/ jobs/
+           README.md requirements.txt backup.sh CLAUDE.md
+           .gitignore .env.example Meta_Dev_Knowledge.md Meta_User_Feedback.md)
+existing_paths=()
+for p in "${add_paths[@]}"; do
+    if [ -e "$p" ]; then existing_paths+=("$p"); else echo "[$(ts)] 提醒：備份清單路徑不存在，已略過：$p" >> "$BACKUP_LOG"; fi
+done
+git add -- "${existing_paths[@]}"
 
-# 3. 若沒有變更，git commit 會因為「nothing to commit」而失敗（不是產生空
-#    commit），用 || true 避免中斷腳本；--allow-empty-message 只是允許空白
-#    的 commit「訊息」，跟允許空白「變更」是兩回事，這裡刻意不加
-#    --allow-empty，所以沒有變更的日子不會產生無意義的空 commit。
-git commit -m "auto backup $(ts)" --allow-empty-message >/dev/null 2>&1 || true
+# 3. 沒有暫存變更就不 commit（不產生空 commit）。有變更時 commit 失敗必須
+#    如實記錄：2026-09-24 發現 pre-commit guard 擋下「直接 commit 到 main」，
+#    舊寫法 `|| true` 把失敗吞掉，push 沒東西可推也回 0，log 照寫「成功」，
+#    暫存區卻一直留著沒 commit 的變更。
+commit_failed=0
+if ! git diff --cached --quiet; then
+    commit_output="$(git commit -m "auto backup $(ts)" 2>&1)"
+    if [ $? -ne 0 ]; then
+        commit_failed=1
+        {
+            echo "[$(ts)] 失敗，commit 被拒（暫存區變更仍未 commit）"
+            echo "$commit_output"
+        } >> "$ERROR_LOG"
+    fi
+fi
 
 # 4. push；用 exit code 判斷成功/失敗，push 的完整輸出先存起來，
 #    只有失敗時才寫進 backup_errors.log。刻意不用 set -e，這裡才是
@@ -73,13 +90,19 @@ push_output="$(git push origin main 2>&1)"
 push_exit=$?
 commit_hash="$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
 
-if [ "$push_exit" -eq 0 ]; then
-    echo "[$(ts)] 成功，commit=$commit_hash" >> "$BACKUP_LOG"
-    echo "[$(ts)] 備份完成並已推送（commit=$commit_hash）"
-else
+if [ "$push_exit" -ne 0 ]; then
     {
         echo "[$(ts)] 失敗，commit=$commit_hash"
         echo "$push_output"
     } >> "$ERROR_LOG"
-    echo "[$(ts)] 備份 push 失敗（commit=$commit_hash），詳見 logs/backup_errors.log"
 fi
+
+# exit code 要反映真實結果：排程的 run_task.ps1 只看 exit code。
+if [ "$commit_failed" -eq 0 ] && [ "$push_exit" -eq 0 ]; then
+    echo "[$(ts)] 成功，commit=$commit_hash" >> "$BACKUP_LOG"
+    echo "[$(ts)] 備份完成並已推送（commit=$commit_hash）"
+    exit 0
+fi
+echo "[$(ts)] 失敗（commit_failed=$commit_failed push_exit=$push_exit），詳見 logs/backup_errors.log" >> "$BACKUP_LOG"
+echo "[$(ts)] 備份失敗，詳見 logs/backup_errors.log"
+exit 1

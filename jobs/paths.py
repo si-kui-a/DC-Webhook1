@@ -7,8 +7,9 @@ WORK_DIR = os.path.join(PROJECT_ROOT, "work")
 SOURCE_HEALTH_PATH = os.path.join(WORK_DIR, "source_health.json")
 os.makedirs(WORK_DIR, exist_ok=True)
 
-# data/ 存放要進版控、給其他程式/人類讀取的「合併後」資料檔(跟work/純log
-# /執行期狀態分開)，第一個用途是thu_calendar.py的當期學期行事曆。
+# data/ 存放「合併後」資料檔(跟work/純log/執行期狀態分開)，第一個用途是
+# thu_calendar.py的當期學期行事曆。2026-09-25起該檔不進版控(.gitignore)：
+# 沒有其他程式讀它，每天重新產生，進版控只會讓main每天留下未commit變更。
 DATA_DIR = os.path.join(PROJECT_ROOT, "data")
 THU_CALENDAR_PATH = os.path.join(DATA_DIR, "thu_academic_calendar.json")
 os.makedirs(DATA_DIR, exist_ok=True)

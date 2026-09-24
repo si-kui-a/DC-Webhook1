@@ -53,6 +53,15 @@ jobs/*.py的異動完全沒被夜間自動備份覆蓋到，這次一併補上(�
 `jobs/scholarship.py`/`jobs/internship.py`/`jobs/thu_calendar.py`一起
 生效)。
 
+**2026-09-25 改為不進版控**：上述機制實際上從未運作——pre-commit guard
+擋下任何直接commit到main，backup.sh的`git commit ... || true`把失敗吞掉，
+push沒東西可推也回0，log照寫「成功」；行事曆檔就一直以「已暫存、未commit」
+留在main上，連帶擋住guard的跨repo同步。查證結果：沒有任何程式讀這個檔
+(cot也沒有串接)，GitHub Actions版排程也刻意不推回。因此改列`.gitignore`
+、從backup.sh的`git add`清單移除`data/`，並讓backup.sh在commit被拒時如實
+寫進backup_errors.log、exit 1。日後若真有程式要讀，再改成由該程式直接抓
+Google Calendar，不要恢復每天自動commit。
+
 **排程**：新增`IntelPusher-ThuCalendar`工作排程(`scripts/
 add_thu_calendar_task.ps1`)，每天06:00、pythonw.exe執行
 `main.py --source thu_calendar`，比其他既有排程(07:00 daily_recap等)

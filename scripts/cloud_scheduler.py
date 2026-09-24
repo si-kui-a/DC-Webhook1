@@ -51,7 +51,8 @@ TASKS = {
     "semi_supply_chain_digest": (["main.py", "--source", "semi_supply_chain_digest"], 20, None),
     "tsmc_digest": (["main.py", "--source", "tsmc_digest"], 20, None),
     "us_stock_digest": (["main.py", "--source", "us_stock_digest"], 20, None),
-    "rental_search": (["main.py", "--source", "rental_search"], 20, None),
+    # rental_search deliberately not scheduled: data.moi.gov.tw has timed out 20+ runs
+    # in a row locally and from runners (2026-09-24); re-add once the source is fixed.
     "crypto_meta": (["main.py", "--source", "crypto_meta"], 21, None),
     "tw_stock_meta": (["main.py", "--source", "tw_stock_meta"], 21, None),
     "crypto_nightly_recap": (["main.py", "--source", "crypto_nightly_recap"], 23, None),

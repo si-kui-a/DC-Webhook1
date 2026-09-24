@@ -7,9 +7,14 @@ name: scheduler
 # State: data.db + work/ are restored from / saved to the Actions cache each tick
 # (cache storage is free; artifacts count against the 500MB free quota). A daily
 # artifact copy is kept as a backup in case the cache is evicted.
+#
+# Trigger: the hourly tick comes from an external cron calling the workflow_dispatch
+# API. GitHub's own schedule event is best-effort and since 2026-08-26 has run
+# 2-6 h late on this account (keyword-radar, content-health). The native cron below
+# is only a sparse safety net; the dispatcher's catch-up makes late/double ticks harmless.
 on:
   schedule:
-    - cron: '7 * * * *'  # :07 avoids the top-of-hour congestion that delays cron runs
+    - cron: '43 1,7,13,19 * * *'  # fallback only; odd minute avoids top-of-hour congestion
   workflow_dispatch:
     inputs:
       only:
@@ -31,8 +36,10 @@ concurrency:
   group: ip-state
   cancel-in-progress: false
 
+# data/thu_academic_calendar.json is not pushed back: nothing outside this job reads
+# it (grep over C:\Projects, 2026-09-24), so a bot commit to main every day buys nothing.
 permissions:
-  contents: write  # push data/thu_academic_calendar.json when it changes
+  contents: read
   actions: write   # prune old state caches
 
 env:
@@ -105,16 +112,6 @@ jobs:
             data.db
             work/
           key: ip-state-${{ github.run_id }}-${{ github.run_attempt }}
-
-      - name: Push academic calendar if changed
-        if: always()
-        run: |
-          git diff --quiet -- data/thu_academic_calendar.json && exit 0
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add data/thu_academic_calendar.json
-          git commit -m "chore(data): update THU academic calendar (scheduler)"
-          git pull --rebase origin main && git push origin HEAD:main
 
       - name: Decide daily backup
         id: backup

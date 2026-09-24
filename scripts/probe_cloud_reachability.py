@@ -76,6 +76,10 @@ def main() -> int:
          {"User-Agent": chrome, "Accept": rss_accept}),
         ("requests api/v1/archive", "https://unclestocknotes.substack.com/api/v1/archive?sort=new&limit=5",
          {"User-Agent": chrome, "Accept": "application/json"}),
+        ("relay rss2json", "https://api.rss2json.com/v1/api.json?rss_url="
+         "https%3A%2F%2Funclestocknotes.substack.com%2Ffeed", {"User-Agent": chrome}),
+        ("relay r.jina.ai", "https://r.jina.ai/https://unclestocknotes.substack.com/feed",
+         {"User-Agent": chrome, "X-Return-Format": "text"}),
         ("daad chrome", "https://www2.daad.de/bundles/daadstipendiendatenbanklsh/data/a/js/scholarships.js",
          {"User-Agent": chrome}),
     ]

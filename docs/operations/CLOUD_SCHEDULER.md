@@ -14,7 +14,7 @@
 | `scripts/cloud_scheduler.py` | 依台灣時間決定該跑哪些排程；當天補跑；每天最多重試 3 次 |
 | Actions cache `ip-state-*` | 只存**加密後**的 `state.enc`（`data.db` + `work/`），只留最新 3 份 |
 | Artifact `state-backup-*` | 每天 03 點備份一份加密的 `state.enc`，保留 7 天 |
-| Draft release `state-seed` | 只在 cache 為空時用來初始化；找不到就拒絕執行（避免空 DB 重推全部舊資料） |
+| Release `state-seed`（加密的 `state-seed.enc`） | 只在 cache 為空時用來初始化；找不到就拒絕執行（避免空 DB 重推全部舊資料） |
 | Secret `DOTENV` | 整份 `.env` 內容，含 `STATE_KEY`、`HC_PING_URL` |
 | Healthchecks.io | 每次 tick 回報成功／失敗；太久沒回報就通知 |
 
@@ -40,9 +40,10 @@
 ## 切換步驟（依序，避免 data.db 分岔）
 
 1. 停用本機排程（ResumeBot 以外）：`Disable-ScheduledTask -TaskName IntelPusher-<名稱>`
-2. 打包狀態：`tar -czf state-seed.tar.gz data.db work/`
-3. 上傳：`gh release create state-seed state-seed.tar.gz --draft --title state-seed --notes "initial state"`
-   （draft release 只有有寫入權限的人看得到）
+2. 打包並加密狀態（金鑰取自本機 `.env` 的 `STATE_KEY`，不要印出來）：
+   `tar --force-local -czf - data.db work/ | STATE_KEY=<取自 .env> openssl enc -aes-256-cbc -pbkdf2 -iter 200000 -salt -pass env:STATE_KEY -out state-seed.enc`
+3. 上傳：`gh release create state-seed state-seed.enc --prerelease --title state-seed --notes "encrypted initial state"`
+   （**不能用 draft**：workflow 的 token 只有讀取權限，看不到 draft release。公開 repo 的 release 是公開的，所以一定要加密）
 4. 設定 secret：`gh secret set DOTENV < .env`（不要把內容印出來）
 5. 手動觸發一次並勾 `mark_done_today`：把當天本機已跑過的排程記成完成，避免重複推播
 6. 確認 run 成功、cache 出現 `ip-state-*` 之後，刪掉 `state-seed` release

@@ -97,7 +97,7 @@ jobs:
           STATE_KEY="$key" openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -pass env:STATE_KEY -in state.enc | tar -xzf -
           test -s data.db
 
-      # First run only: take the seed uploaded from the local machine (draft release
+      # First run only: take the encrypted seed uploaded from the local machine (release
       # "state-seed"). Refuse to start from an empty DB -- dedup history would be gone
       # and every source would re-push everything it has ever seen.
       - name: Seed state if cache is empty
@@ -105,9 +105,14 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release download state-seed --pattern 'state-seed.tar.gz' --dir /tmp \
+          # A published (not draft) release: github.token only has contents:read, which can't
+          # list draft releases (the 2026-09-26 cutover failed on exactly that). Published
+          # releases of a public repo are public, so the seed is encrypted like the cache.
+          gh release download state-seed --pattern 'state-seed.enc' --dir /tmp \
             || { echo "::error::no cached state and no state-seed release; refusing to start from an empty data.db"; exit 1; }
-          tar -xzf /tmp/state-seed.tar.gz
+          key=$(sed -n 's/^STATE_KEY=//p' .env)
+          if [ -z "$key" ]; then echo "::error::STATE_KEY missing from DOTENV"; exit 1; fi
+          STATE_KEY="$key" openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -pass env:STATE_KEY -in /tmp/state-seed.enc | tar -xzf -
           test -s data.db
 
       - name: Dispatch

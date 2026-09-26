@@ -14,10 +14,14 @@ change屬於這個例外的適用範圍(不含新功能/架構調整/schema變�
     python scripts/publish_mechanical_change.py \
         --files config/internship_keywords.json test/test_foo.py \
         --branch chore/some-change \
-        --commit-title "chore(internship): 排除XX類" \
-        --commit-body "說明..." \
+        --commit-title "chore(internship): exclude XX listings" \
+        --commit-body "Why..." \
         --pr-title "chore(internship): 排除XX類" \
         --pr-body "PR說明..." \
+
+commit／PR 的文風與署名依 cross-project-scripts 的 output_style.py（2026-09-26 起所有
+對外文字同一套規則）：commit 用英文、PR 標題與內文用繁中；署名由 output_style.footer()
+附上，不帶連結。任何一項不合格就在第 1 步之前中止，不會留下半套的分支或 PR。
         --test test/test_internship_keyword_commands.py \
         --test test/test_internship_exclude_regressions.py
 
@@ -41,11 +45,14 @@ git/gh的狀態(已建分支/已commit/已push/已開PR)如實保留，不自動
 """
 import argparse
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
+# output_style.py 是所有對外文字規則的唯一來源；這裡不另存署名範本（曾經各自漂移）
+OUTPUT_STYLE_DIR = os.environ.get("OUTPUT_STYLE_DIR", "C:/Projects/_scripts")
 _NO_WINDOW = subprocess.CREATE_NO_WINDOW if hasattr(subprocess, "CREATE_NO_WINDOW") else 0
 
 
@@ -85,6 +92,30 @@ def run_tests(test_modules: list[str]) -> None:
             sys.exit(1)
 
 
+def build_texts(args: argparse.Namespace) -> tuple[str, str]:
+    """組出 commit 訊息與 PR 內文（附上統一署名），任何一項不合文風規則就中止。"""
+    sys.path.insert(0, OUTPUT_STYLE_DIR)
+    try:
+        import output_style
+    except ImportError as e:
+        print(f"載入不到 {OUTPUT_STYLE_DIR}/output_style.py（{e}）；設定 OUTPUT_STYLE_DIR 或 clone "
+              "si-kui-a/cross-project-scripts 到該處", file=sys.stderr)
+        sys.exit(1)
+    owner = args.repo.split("/")[0]
+    commit_msg = args.commit_title
+    if args.commit_body:
+        commit_msg += "\n\n" + args.commit_body
+    commit_msg += "\n\n" + output_style.footer("commit", owner)
+    pr_body = args.pr_body + "\n\n" + output_style.footer("pr_body", owner)
+    problems = []
+    for text, kind in ((commit_msg, "commit"), (args.pr_title, "pr_title"), (pr_body, "pr_body")):
+        problems += [f"{kind}: {p}" for p in output_style.check(text, kind, owner)]
+    if problems:
+        print("文字不符合 output_style.py 的規則，中止發布：\n  " + "\n  ".join(problems), file=sys.stderr)
+        sys.exit(1)
+    return commit_msg, pr_body
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--files", nargs="+", required=True, help="要commit的檔案路徑(相對repo root)")
@@ -97,6 +128,7 @@ def main() -> int:
     parser.add_argument("--repo", default="si-kui-a/DC-Webhook1", help="gh --repo參數")
     args = parser.parse_args()
 
+    commit_msg, pr_body = build_texts(args)  # 最便宜的檢查放最前面，不合格就不跑測試也不動 git
     validate_json_files(args.files)
     run_tests(args.tests)
 
@@ -108,14 +140,9 @@ def main() -> int:
         args.branch = branch
 
     _run(["git", "add", *args.files])
-    commit_msg = args.commit_title
-    if args.commit_body:
-        commit_msg += "\n\n" + args.commit_body
-    commit_msg += "\n\nCo-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>"
     _run(["git", "commit", "-m", commit_msg])
     _run(["git", "push", "-u", "origin", args.branch])
 
-    pr_body = args.pr_body + "\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)"
     create = _run(["gh", "pr", "create", "--repo", args.repo, "--title", args.pr_title, "--body", pr_body])
     pr_url = create.stdout.strip().splitlines()[-1] if create.stdout.strip() else ""
     print(f"PR: {pr_url}")

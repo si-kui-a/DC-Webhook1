@@ -120,8 +120,9 @@ def _raw_entries(feed_url: str) -> list[tuple[str, str, str, str]]:
 
 def _raw_entries_via_rss2json(feed_url: str) -> list[tuple[str, str, str, str]]:
     # 不帶key時rss2json約連續10次就回429且數分鐘不解除(2026-09-24實測)，
-    # 20:00那輪4個digest共要打約11次，所以雲端要設RSS2JSON_API_KEY(免費帳號)；
-    # 帶key才能用count，順便拉到跟原feed一樣的20篇。
+    # 原本20:00那輪4個digest共要打約11次；2026-09-26起cloud_scheduler把它們分到
+    # 19/20/21點，每次最多5次，不設key也不會撞到。RSS2JSON_API_KEY仍可選填：
+    # 帶key才能用count，拉到跟原feed一樣的20篇。
     params = {"rss_url": feed_url}
     api_key = os.getenv("RSS2JSON_API_KEY")
     if api_key:

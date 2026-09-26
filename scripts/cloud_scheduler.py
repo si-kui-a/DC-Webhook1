@@ -1,8 +1,9 @@
 """Hourly dispatcher for the GitHub Actions scheduler (replaces Windows Task Scheduler).
 
 Why one hourly dispatcher instead of one cron per task:
-- Actions bills every job rounded up to a whole minute, so 25 separate crons
-  cost ~3,000 min/month; one hourly job stays inside the 2,000-min free tier.
+- The repo went public on 2026-09-26 (unlimited Actions minutes; the private 2,000-min
+  quota is shared with every other private repo and an hourly tick alone was estimated
+  at 1,200-2,000 min/month). One job per tick still keeps the logs in one place.
 - Only one run touches data.db at a time (workflow concurrency group), so the
   SQLite state restored from cache never forks.
 - Catch-up: a task whose Taipei-time slot has passed and hasn't succeeded today
@@ -13,6 +14,10 @@ Why one hourly dispatcher instead of one cron per task:
 
 State (last success date + attempts per task) lives in work/cloud_schedule_state.json,
 which is persisted together with data.db between runs.
+
+Public logs: a task's own output goes to work/logs/<task>-<date>.log (kept 7 days, stored
+inside the encrypted state bundle), never to the Actions log, which anyone can read on a
+public repo. The Actions log only gets name, exit code and duration.
 """
 import argparse
 import json
@@ -24,6 +29,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 STATE_PATH = ROOT / "work" / "cloud_schedule_state.json"
+LOG_DIR = ROOT / "work" / "logs"
+LOG_KEEP_DAYS = 7
 TAIWAN_TZ = timezone(timedelta(hours=8))
 WEEKDAYS = frozenset(range(5))  # Mon-Fri, matches the local tasks' DaysOfWeek=62
 MONDAY = frozenset({0})
@@ -47,10 +54,14 @@ TASKS = {
     "cbc_digest": (["main.py", "--source", "cbc_digest"], 20, None),
     "crypto_digest": (["main.py", "--source", "crypto_digest"], 20, None),
     "geopolitics_digest": (["main.py", "--source", "geopolitics_digest"], 20, None),
-    "macro_tech_digest": (["main.py", "--source", "macro_tech_digest"], 20, None),
+    # Substack digests are spread over 19/20/21 (was all at 20): from runner IPs Substack
+    # answers with a Cloudflare challenge and they go through rss2json, which 429s after
+    # ~10 keyless calls in a row (2026-09-24). us_stock 5 feeds, crypto 4 + geopolitics 1,
+    # macro_tech 4 -> at most 5 calls per tick, so no rss2json account is needed.
+    "macro_tech_digest": (["main.py", "--source", "macro_tech_digest"], 21, None),
     "semi_supply_chain_digest": (["main.py", "--source", "semi_supply_chain_digest"], 20, None),
     "tsmc_digest": (["main.py", "--source", "tsmc_digest"], 20, None),
-    "us_stock_digest": (["main.py", "--source", "us_stock_digest"], 20, None),
+    "us_stock_digest": (["main.py", "--source", "us_stock_digest"], 19, None),
     # rental_search deliberately not scheduled: data.moi.gov.tw has timed out 20+ runs
     # in a row locally and from runners (2026-09-24); re-add once the source is fixed.
     "crypto_meta": (["main.py", "--source", "crypto_meta"], 21, None),
@@ -97,18 +108,29 @@ def run(name: str, argv: list[str], dry_run: bool) -> bool:
     if dry_run:
         print(f"[dry-run] {name}: {' '.join(argv)}", flush=True)
         return True
-    print(f"::group::{name}", flush=True)
+    LOG_DIR.mkdir(parents=True, exist_ok=True)
+    log_path = LOG_DIR / f"{name}-{datetime.now(TAIWAN_TZ).date().isoformat()}.log"
     start = time.monotonic()
-    try:
-        code = subprocess.run(cmd, cwd=ROOT, timeout=TASK_TIMEOUT_SEC).returncode
-    except subprocess.TimeoutExpired:
-        code = "timeout"
-    print("::endgroup::", flush=True)
+    with open(log_path, "a", encoding="utf-8") as log:
+        log.write(f"--- {datetime.now(TAIWAN_TZ).isoformat()} {' '.join(argv)}\n")
+        log.flush()
+        try:
+            code = subprocess.run(cmd, cwd=ROOT, timeout=TASK_TIMEOUT_SEC,
+                                  stdout=log, stderr=subprocess.STDOUT).returncode
+        except subprocess.TimeoutExpired:
+            code = "timeout"
     ok = code == 0
     print(f"{name}: exit={code} {time.monotonic() - start:.0f}s", flush=True)
     if not ok:
-        print(f"::error title={name}::exit={code}", flush=True)
+        print(f"::error title={name}::exit={code} (details in the encrypted state: {log_path.name})", flush=True)
     return ok
+
+
+def prune_logs(now: datetime) -> None:
+    cutoff = (now - timedelta(days=LOG_KEEP_DAYS)).date().isoformat()
+    for path in LOG_DIR.glob("*.log"):
+        if path.stem[-10:] < cutoff:  # "<task>-YYYY-MM-DD"
+            path.unlink()
 
 
 def main() -> int:
@@ -138,6 +160,8 @@ def main() -> int:
         return 2
 
     print(f"tick {now.isoformat()} due={names}", flush=True)
+    if not args.dry_run:
+        prune_logs(now)
     failed = []
     if args.only is None or EVERY_TICK[0] in names:
         if not run(*EVERY_TICK, dry_run=args.dry_run):

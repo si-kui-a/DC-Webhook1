@@ -67,15 +67,35 @@ jobs:
           if [ -z "$DOTENV" ]; then echo "::error::secret DOTENV is not set"; exit 1; fi
           printf '%s\n' "$DOTENV" > .env
 
+      # The repo is public, so its logs are world-readable. DOTENV is one multi-line secret and
+      # GitHub doesn't guarantee redacting multi-line secrets line by line, so every value is
+      # masked on its own: a webhook URL printed in some error message then shows as ***.
+      - name: Mask every .env value
+        run: |
+          while IFS= read -r line || [ -n "$line" ]; do
+            case "$line" in ''|\#*|*=) continue ;; esac
+            value="${line#*=}"; value="${value%\"}"; value="${value#\"}"
+            echo "::add-mask::$value"
+          done < .env
+
+      # Caches are readable by workflows from fork pull requests, so the state is only ever
+      # cached encrypted (key STATE_KEY lives inside DOTENV; the local .env keeps a copy for
+      # restoring to the laptop, see docs/operations/CLOUD_SCHEDULER.md).
       - name: Restore state
         id: restore
         uses: actions/cache/restore@v4
         with:
-          path: |
-            data.db
-            work/
+          path: state.enc
           key: ip-state-${{ github.run_id }}
           restore-keys: ip-state-
+
+      - name: Decrypt state
+        if: steps.restore.outputs.cache-matched-key != ''
+        run: |
+          key=$(sed -n 's/^STATE_KEY=//p' .env)
+          if [ -z "$key" ]; then echo "::error::STATE_KEY missing from DOTENV"; exit 1; fi
+          STATE_KEY="$key" openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -pass env:STATE_KEY -in state.enc | tar -xzf -
+          test -s data.db
 
       # First run only: take the seed uploaded from the local machine (draft release
       # "state-seed"). Refuse to start from an empty DB -- dedup history would be gone
@@ -104,13 +124,19 @@ jobs:
           if [ "$MARK_DONE" = "true" ]; then args+=(--mark-done-today); fi
           python scripts/cloud_scheduler.py "${args[@]}"
 
-      - name: Save state
+      - name: Encrypt state
+        id: encrypt
         if: always() && hashFiles('data.db') != ''
+        run: |
+          key=$(sed -n 's/^STATE_KEY=//p' .env)
+          if [ -z "$key" ]; then echo "::error::STATE_KEY missing from DOTENV"; exit 1; fi
+          tar -czf - data.db work/ | STATE_KEY="$key" openssl enc -aes-256-cbc -pbkdf2 -iter 200000 -salt -pass env:STATE_KEY -out state.enc
+
+      - name: Save state
+        if: always() && steps.encrypt.outcome == 'success'
         uses: actions/cache/save@v4
         with:
-          path: |
-            data.db
-            work/
+          path: state.enc
           key: ip-state-${{ github.run_id }}-${{ github.run_attempt }}
 
       - name: Decide daily backup
@@ -118,15 +144,26 @@ jobs:
         if: always()
         run: echo "due=$([ "$(date +%H)" = "03" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
 
+      # Artifacts of a public repo can be downloaded by any signed-in GitHub user: encrypted only.
       - name: Daily state backup
-        if: always() && steps.backup.outputs.due == 'true' && hashFiles('data.db') != ''
+        if: always() && steps.backup.outputs.due == 'true' && steps.encrypt.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
           name: state-backup-${{ github.run_id }}
-          path: |
-            data.db
-            work/
+          path: state.enc
           retention-days: 7
+
+      # Dead man's switch: Healthchecks.io alerts when these pings stop or report failure.
+      # HC_PING_URL lives in DOTENV (masked above) so nobody can spoof pings from the logs.
+      - name: Report to Healthchecks
+        if: always()
+        env:
+          OUTCOME: ${{ steps.dispatch.outcome }}
+        run: |
+          url=$(sed -n 's/^HC_PING_URL=//p' .env)
+          if [ -z "$url" ]; then exit 0; fi
+          suffix=""; if [ "$OUTCOME" != "success" ]; then suffix="/fail"; fi
+          curl -fsS -m 10 --retry 3 -o /dev/null "$url$suffix" || true
 
       - name: Prune old state caches (keep newest 3)
         if: always()

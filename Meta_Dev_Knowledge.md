@@ -650,8 +650,9 @@ Windows上`truststore`走CryptoAPI較寬鬆所以沒事，Linux上truststore
 
 **修復**：`substack_generic`只在「403且cf-mitigated=challenge」時改走
 rss2json，本機直抓不變；rss2json內容較短但`_extract_free_preview()`
-結果逐篇相同。rss2json不帶key約10次就429且數分鐘不解，雲端需設
-`RSS2JSON_API_KEY`。
+結果逐篇相同。rss2json不帶key約10次就429且數分鐘不解；2026-09-26起
+雲端排程把Substack摘要分到19/20/21點（每次最多5次），不再需要
+`RSS2JSON_API_KEY`（仍可選填）。
 
 ### [PAT-33] GitHub Actions schedule事件不能當準時排程用
 **背景**：2026-08-26起帳號內`keyword-radar`(20:20 UTC)實際晚2–3小時、

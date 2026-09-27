@@ -149,15 +149,14 @@ def main() -> int:
 
     _run(["gh", "pr", "merge", "--repo", args.repo, args.branch, "--merge", "--delete-branch"])
 
-    # PAT-30：base_branch算出來後原本沒被用到，"git checkout main"寫死——
-    # 目前這個repo預設分支剛好是main，沒露餡，但如果起始分支是這個
-    # repo以外的master-default repo(這支腳本註解本身就有處理"master"
-    # 的分支)，merge後會checkout到錯誤/不存在的分支，本機工作目錄
-    # 跟實際merge結果不同步且不會報錯。
-    base_branch = "main" if branch in ("main", "master", "") else branch
+    # 回到遠端預設分支，不用起始分支推算：從功能分支起跑時（事先建好分支再呼叫），
+    # 舊寫法會切回剛被 --delete-branch 刪掉的功能分支，pull 失敗、本機停在舊內容。
     _run(["git", "fetch", "origin", "--prune"])
+    _run(["git", "remote", "set-head", "origin", "--auto"])
+    base_branch = _run(["git", "symbolic-ref", "--short", "refs/remotes/origin/HEAD"]).stdout.strip().split("/", 1)[1]
     _run(["git", "checkout", base_branch])
-    _run(["git", "pull"])
+    _run(["git", "pull", "--ff-only"])
+    _run(["git", "branch", "-d", args.branch])
     print(f"完成：已merge並同步本機{base_branch}。")
     return 0
 

@@ -1,6 +1,6 @@
 # 雲端排程（GitHub Actions）操作手冊
 
-建立：2026-09-24｜更新：2026-09-26（repo 改公開、狀態加密、Healthchecks 監控、取消 rss2json）
+建立：2026-09-24｜更新：2026-09-27（`installTrigger` 移到切換最後一步）
 
 取代本機 Windows `IntelPusher-*` 排程（ResumeBot 除外，常駐 Discord bot 無法在 Actions 跑）。
 設計理由寫在 `scripts/cloud_scheduler.py` 與 `.github/workflows/scheduler.yml` 開頭註解，這裡只記操作。
@@ -33,7 +33,7 @@
 
 1. **GitHub token**：Fine-grained token，只選 `DC-Webhook1`，Repository permissions 只開 **Actions: Read and write**。
 2. **Apps Script**：script.google.com 新專案，貼上 `ops/gas_hourly_trigger.gs`；
-   專案設定 → 指令碼屬性新增 `GITHUB_TOKEN`；在編輯器執行一次 `installTrigger`（會要求授權）。
+   專案設定 → 指令碼屬性新增 `GITHUB_TOKEN`。**先不要跑 `installTrigger`**，等切換步驟 7。
 3. **`.env` 新增兩行**：`STATE_KEY=<隨機字串>`（`openssl rand -base64 32`）、`HC_PING_URL=<Healthchecks 的 ping 網址>`。
    rss2json 不需要帳號：Substack 摘要分散在 19／20／21 點，每次最多打 5 次。
 
@@ -47,6 +47,8 @@
 4. 設定 secret：`gh secret set DOTENV < .env`（不要把內容印出來）
 5. 手動觸發一次並勾 `mark_done_today`：把當天本機已跑過的排程記成完成，避免重複推播
 6. 確認 run 成功、cache 出現 `ip-state-*` 之後，刪掉 `state-seed` release
+7. 在 Apps Script 編輯器執行一次 `installTrigger`（會要求授權；建立觸發器後立刻 `tick()` 一次驗證 token）。
+   不能提前跑：還沒有 `state-seed` 時每小時的 run 都會失敗並觸發 Healthchecks 警報；本機排程還開著時，兩邊同時跑會讓 data.db 分岔、重複推播
 
 ## 還原到本機
 

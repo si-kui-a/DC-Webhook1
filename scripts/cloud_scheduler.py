@@ -27,6 +27,8 @@ import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+_NO_WINDOW = subprocess.CREATE_NO_WINDOW if hasattr(subprocess, "CREATE_NO_WINDOW") else 0
+
 ROOT = Path(__file__).resolve().parent.parent
 STATE_PATH = ROOT / "work" / "cloud_schedule_state.json"
 LOG_DIR = ROOT / "work" / "logs"
@@ -116,7 +118,7 @@ def run(name: str, argv: list[str], dry_run: bool) -> bool:
         log.flush()
         try:
             code = subprocess.run(cmd, cwd=ROOT, timeout=TASK_TIMEOUT_SEC,
-                                  stdout=log, stderr=subprocess.STDOUT).returncode
+                                  stdout=log, stderr=subprocess.STDOUT, creationflags=_NO_WINDOW).returncode
         except subprocess.TimeoutExpired:
             code = "timeout"
     ok = code == 0

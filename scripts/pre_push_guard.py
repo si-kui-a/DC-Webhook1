@@ -29,6 +29,8 @@ push在異常環境下無端失敗。
 import subprocess
 import sys
 
+_NO_WINDOW = subprocess.CREATE_NO_WINDOW if hasattr(subprocess, "CREATE_NO_WINDOW") else 0
+
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
     sys.stderr.reconfigure(encoding="utf-8")
@@ -37,7 +39,7 @@ _ZERO_SHA = "0" * 40
 
 
 def _run(args):
-    return subprocess.run(args, capture_output=True, text=True, encoding="utf-8")
+    return subprocess.run(args, capture_output=True, text=True, encoding="utf-8", creationflags=_NO_WINDOW)
 
 
 def _has_parent(sha: str) -> bool:
@@ -49,8 +51,7 @@ def _has_parent(sha: str) -> bool:
 def _is_ancestor(ancestor: str, descendant: str) -> bool:
     result = subprocess.run(
         ["git", "merge-base", "--is-ancestor", ancestor, descendant],
-        capture_output=True
-    )
+        capture_output=True, creationflags=_NO_WINDOW)
     return result.returncode == 0
 
 

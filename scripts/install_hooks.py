@@ -10,6 +10,8 @@ import stat
 import shutil
 import subprocess
 
+_NO_WINDOW = subprocess.CREATE_NO_WINDOW if hasattr(subprocess, "CREATE_NO_WINDOW") else 0
+
 
 def find_python_cmd():
     for cmd in ["python3", "python"]:
@@ -39,8 +41,7 @@ def install():
     # 原本沒套用同樣修法，2026-07-31補上)。
     repo_root = subprocess.run(
         ["git", "rev-parse", "--show-toplevel"],
-        capture_output=True, text=True, check=True, encoding="utf-8"
-    ).stdout.strip()
+        capture_output=True, text=True, check=True, encoding="utf-8", creationflags=_NO_WINDOW).stdout.strip()
     py_cmd = find_python_cmd()
     commit_hook = _write_hook(repo_root, "pre-commit", "pre_commit_guard.py", py_cmd)
     push_hook = _write_hook(repo_root, "pre-push", "pre_push_guard.py", py_cmd)

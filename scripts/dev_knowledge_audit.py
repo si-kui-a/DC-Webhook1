@@ -22,6 +22,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+_NO_WINDOW = subprocess.CREATE_NO_WINDOW if hasattr(subprocess, "CREATE_NO_WINDOW") else 0
+
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
     sys.stderr.reconfigure(encoding="utf-8")
@@ -155,12 +157,10 @@ def check_unmerged_branches() -> None:
     try:
         subprocess.run(
             ["git", "fetch", "--all", "--prune"],
-            cwd=ROOT, capture_output=True, timeout=30, check=False,
-        )
+            cwd=ROOT, capture_output=True, timeout=30, check=False, creationflags=_NO_WINDOW)
         result = subprocess.run(
             ["git", "branch", "-r", "--no-merged", f"origin/{default_branch}"],
-            cwd=ROOT, capture_output=True, text=True, timeout=10, check=False,
-        )
+            cwd=ROOT, capture_output=True, text=True, timeout=10, check=False, creationflags=_NO_WINDOW)
         names = [
             line.strip() for line in result.stdout.splitlines()
             if line.strip() and "->" not in line
@@ -175,8 +175,7 @@ def check_unmerged_branches() -> None:
         short = name.removeprefix("origin/")
         count = subprocess.run(
             ["git", "rev-list", "--count", f"origin/{default_branch}..{name}"],
-            cwd=ROOT, capture_output=True, text=True, timeout=10, check=False,
-        ).stdout.strip()
+            cwd=ROOT, capture_output=True, text=True, timeout=10, check=False, creationflags=_NO_WINDOW).stdout.strip()
         print(f"  {short}：領先{count}個commit，未merge")
     print(f"  共{len(names)}個——是否要救回內容或直接刪除，逐一核對實際"
           f"commit內容才能判斷，不能只憑分支名稱/存在天數猜測")

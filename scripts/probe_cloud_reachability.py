@@ -96,7 +96,8 @@ def main() -> int:
     import subprocess
     out = subprocess.run(["curl", "-s", "-o", "/dev/null", "-w", "%{http_code}", "-A", chrome,
                           "-H", f"Accept: {rss_accept}", "https://unclestocknotes.substack.com/feed"],
-                         capture_output=True, text=True, timeout=30).stdout
+                         capture_output=True, text=True, timeout=30,
+                         creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0)).stdout
     print(f"curl chrome+rss-accept\t-\tHTTP {out}", flush=True)
     try:
         from curl_cffi import requests as cffi

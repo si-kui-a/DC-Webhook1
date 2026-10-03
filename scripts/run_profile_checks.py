@@ -4,11 +4,13 @@ from __future__ import annotations
 import argparse, csv, json, re, subprocess, sys
 from pathlib import Path
 
+_NO_WINDOW = subprocess.CREATE_NO_WINDOW if hasattr(subprocess, "CREATE_NO_WINDOW") else 0
+
 AI_WORDS = re.compile(r"(faster-whisper|openai|anthropic|gemini|transformers|torch|llama)", re.I)
 
 def tracked(root: Path) -> set[str]:
     try:
-        out = subprocess.check_output(["git", "-C", str(root), "ls-files"], text=True, encoding="utf-8", errors="replace", stderr=subprocess.DEVNULL)
+        out = subprocess.check_output(["git", "-C", str(root), "ls-files"], text=True, encoding="utf-8", errors="replace", stderr=subprocess.DEVNULL, creationflags=_NO_WINDOW)
         return {x.replace("\\", "/") for x in out.splitlines()}
     except (OSError, subprocess.CalledProcessError):
         return set()

@@ -41,6 +41,8 @@ import subprocess
 import sys
 import os
 
+_NO_WINDOW = subprocess.CREATE_NO_WINDOW if hasattr(subprocess, "CREATE_NO_WINDOW") else 0
+
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
     sys.stderr.reconfigure(encoding="utf-8")
@@ -51,8 +53,7 @@ _PROJECTS_ROOT = r"C:\Projects"
 def check_not_main_branch() -> bool:
     branch = subprocess.run(
         ["git", "rev-parse", "--abbrev-ref", "HEAD"],
-        capture_output=True, text=True, encoding="utf-8"
-    ).stdout.strip()
+        capture_output=True, text=True, encoding="utf-8", creationflags=_NO_WINDOW).stdout.strip()
     if branch not in ("main", "master"):
         return True
     # 全新repo的第一個commit允許直接進main/master——這個當下沒有任何既有
@@ -60,8 +61,7 @@ def check_not_main_branch() -> bool:
     # 塞」，不是「怎麼有main分支存在」本身。用HEAD存不存在判斷是不是首個commit。
     has_commits = subprocess.run(
         ["git", "rev-parse", "--verify", "HEAD"],
-        capture_output=True, text=True, encoding="utf-8"
-    ).returncode == 0
+        capture_output=True, text=True, encoding="utf-8", creationflags=_NO_WINDOW).returncode == 0
     if not has_commits:
         return True
     print(f"[BLOCKED] 目前在 {branch} 分支，禁止直接commit，請先建立feature branch再commit。")
@@ -74,8 +74,7 @@ def check_ps1_bom() -> bool:
     # CI Linux runner上發現，見si-kui-a/local-kit-source#2)。
     result = subprocess.run(
         ["git", "-c", "core.quotePath=false", "diff", "--cached", "--name-only", "--diff-filter=ACM"],
-        capture_output=True, text=True, encoding="utf-8"
-    )
+        capture_output=True, text=True, encoding="utf-8", creationflags=_NO_WINDOW)
     ok = True
     for f in result.stdout.strip().splitlines():
         if not f.lower().endswith(".ps1"):
@@ -94,8 +93,7 @@ def check_ps1_bom() -> bool:
 def check_no_secret_files() -> bool:
     result = subprocess.run(
         ["git", "-c", "core.quotePath=false", "diff", "--cached", "--name-only", "--diff-filter=ACM"],
-        capture_output=True, text=True, encoding="utf-8"
-    )
+        capture_output=True, text=True, encoding="utf-8", creationflags=_NO_WINDOW)
     ok = True
     for f in result.stdout.strip().splitlines():
         basename = os.path.basename(f)
@@ -127,8 +125,7 @@ def _scan_project_repo_slugs(projects_root: str) -> dict:
             continue
         result = subprocess.run(
             ["git", "-C", path, "remote", "get-url", "origin"],
-            capture_output=True, text=True, encoding="utf-8"
-        )
+            capture_output=True, text=True, encoding="utf-8", creationflags=_NO_WINDOW)
         url = result.stdout.strip()
         if not url:
             continue
@@ -143,8 +140,7 @@ def _scan_project_repo_slugs(projects_root: str) -> dict:
 def check_draft_delivery_targets() -> bool:
     result = subprocess.run(
         ["git", "-c", "core.quotePath=false", "diff", "--cached", "--name-only", "--diff-filter=ACM"],
-        capture_output=True, text=True, encoding="utf-8"
-    )
+        capture_output=True, text=True, encoding="utf-8", creationflags=_NO_WINDOW)
     files = [f for f in result.stdout.strip().splitlines() if f.startswith("drafts/") and f.endswith(".md")]
     if not files:
         return True
@@ -188,8 +184,7 @@ _SECRET_PATTERNS = {
 def check_staged_diff_for_secrets() -> bool:
     result = subprocess.run(
         ["git", "-c", "core.quotePath=false", "diff", "--cached", "-U0"],
-        capture_output=True, text=True, encoding="utf-8"
-    )
+        capture_output=True, text=True, encoding="utf-8", creationflags=_NO_WINDOW)
     ok = True
     current_file = None
     for line in result.stdout.splitlines():
@@ -224,8 +219,7 @@ def check_staged_diff_for_secrets() -> bool:
 def check_no_unstaged_deletes() -> bool:
     result = subprocess.run(
         ["git", "status", "--porcelain"],
-        capture_output=True, text=True, encoding="utf-8"
-    )
+        capture_output=True, text=True, encoding="utf-8", creationflags=_NO_WINDOW)
     orphaned = [
         line[3:] for line in result.stdout.splitlines()
         if len(line) > 3 and line[1] == "D"
@@ -245,8 +239,7 @@ def check_no_unstaged_deletes() -> bool:
 def check_bulk_deletion_needs_review(threshold: int = 3) -> bool:
     result = subprocess.run(
         ["git", "-c", "core.quotePath=false", "diff", "--cached", "--name-only", "--diff-filter=D"],
-        capture_output=True, text=True, encoding="utf-8"
-    )
+        capture_output=True, text=True, encoding="utf-8", creationflags=_NO_WINDOW)
     deleted = [f for f in result.stdout.strip().splitlines() if f]
     if len(deleted) >= threshold:
         print(
@@ -262,8 +255,7 @@ def check_commit_identity() -> bool:
     # none linked to any GitHub account. Only placeholder identities are blocked -- not a
     # specific account, since repos here commit under more than one GitHub account.
     result = subprocess.run(
-        ["git", "var", "GIT_AUTHOR_IDENT"], capture_output=True, text=True, encoding="utf-8"
-    )
+        ["git", "var", "GIT_AUTHOR_IDENT"], capture_output=True, text=True, encoding="utf-8", creationflags=_NO_WINDOW)
     ident = result.stdout.strip()
     email = ident[ident.find("<") + 1:ident.find(">")].strip().lower() if "<" in ident else ""
     domain = email.rpartition("@")[2]

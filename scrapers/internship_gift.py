@@ -42,12 +42,16 @@ TIMEOUT_SECONDS = 15
 
 
 def _get_page_with_retry(page: int, keyword: str) -> str | None:
-    url = SEARCH_URL if page == 1 else f"{SEARCH_URL}/{page}"
+    # 2026-10-04: the site moved pagination from /jobs/<n> (now 404) to ?page=<n>;
+    # the old path was why GIFT was dropped from the schedule on 2026-09-24.
+    params = {"skeyword": keyword, "s_1": "", "s_2": "", "s_3": "", "s_4": ""}
+    if page > 1:
+        params["page"] = str(page)
     for attempt in range(MAX_RETRIES):
         try:
             resp = requests.get(
-                url, headers=HEADERS,
-                params={"skeyword": keyword, "s_1": "", "s_2": "", "s_3": "", "s_4": ""},
+                SEARCH_URL, headers=HEADERS,
+                params=params,
                 timeout=TIMEOUT_SECONDS,
             )
             resp.raise_for_status()

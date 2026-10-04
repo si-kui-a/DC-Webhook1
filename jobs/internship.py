@@ -11,6 +11,7 @@ from scrapers import internship_mol
 from scrapers import internship_104
 from scrapers import internship_rich
 from scrapers import internship_yes123
+from scrapers import internship_gift
 from scrapers import internship_util
 from jobs.paths import SOURCE_HEALTH_PATH
 
@@ -24,6 +25,8 @@ logger = logging.getLogger("main")
 # 不用觀察一週，累積43筆全數被篩掉，命中率確認0%，達到預設移除標準。
 # GIFT(internship_gift.py)於2026-09-24比照移除：搜尋頁網址HTTP 404連續
 # 24次以上(本機與GitHub runner都一樣)，scraper檔案保留供網址修好後復用。
+# 2026-10-04加回：原因是網站分頁改成?page=N(舊的/jobs/N才404)，修好後
+# 實測3頁30筆、全部不重複。
 # (ops/source_health.json雖標了disabled，但沒有任何程式讀它，不會生效。)
 # 1111人力銀行有主動的CAPTCHA/反爬蟲挑戰機制(altcha widget)，明確不做
 # (見2026-07-31對話紀錄的界線說明)。
@@ -38,6 +41,7 @@ INTERNSHIP_REGISTRY = {
     "internship_104": (internship_104.fetch, internship_104.SOURCE_NAME, internship_104.SOURCE_ID, False),
     "internship_rich": (internship_rich.fetch, internship_rich.SOURCE_NAME, internship_rich.SOURCE_ID, True),
     "internship_yes123": (internship_yes123.fetch, internship_yes123.SOURCE_NAME, internship_yes123.SOURCE_ID, False),
+    "internship_gift": (internship_gift.fetch, internship_gift.SOURCE_NAME, internship_gift.SOURCE_ID, False),
 }
 INTERNSHIP_WEBHOOK_ENV = "WEBHOOK_INTERNSHIP"
 INTERNSHIP_FIRST_RUN_CAP = 20

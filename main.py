@@ -154,14 +154,18 @@ def main():
                 run_source(key)
             except Exception:
                 logger.error(f"[{key}] 執行時發生未預期例外，跳過此來源", exc_info=True)
+    # Single-channel runs (what the cloud scheduler uses) report an explicit False as
+    # exit 1, so the dispatcher retries on a later tick instead of recording success.
+    # Batch flags above keep exit 0: re-running a batch would re-push the channels
+    # that already succeeded.
     elif args.source in DIGEST_CHANNELS:
-        run_digest_channel(args.source)
+        return 1 if run_digest_channel(args.source) is False else 0
     elif args.source in META_SUMMARY_CHANNELS:
-        run_meta_summary_channel(args.source)
+        return 1 if run_meta_summary_channel(args.source) is False else 0
     elif args.source in PORTFOLIO_CHANNELS:
         run_portfolio_channel(args.source)
     elif args.source == "daily_recap":
-        run_daily_recap()
+        return 1 if run_daily_recap() is False else 0
     elif args.source == "crypto_nightly_recap":
         run_crypto_nightly_recap()
     elif args.source == "sig_content_watch":

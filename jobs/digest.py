@@ -241,7 +241,7 @@ def run_digest_channel(key: str):
         raw_items = config["fetch_fn"]()
     except Exception as e:
         logger.error(f"[{key}] 抓取失敗：{e}", exc_info=True)
-        return
+        return False
 
     seen_sources = set()
     new_items = []
@@ -293,20 +293,30 @@ def run_digest_channel(key: str):
 
     digest = ai_insight.build_channel_digest(config["angle"], new_items)
     if not digest:
-        logger.error("[%s] Gemini彙整失敗（額度用盡/網路錯誤/回應格式不對），本次略過推播", key)
-        return
+        dropped = db.discard_unsent_items([item["item_id"] for item in new_items])
+        logger.error("[%s] Gemini彙整失敗（額度用盡/網路錯誤/回應格式不對），本次略過推播；"
+                     "已退回 %d 則項目，下次執行重試", key, dropped)
+        return False
 
     date_str = datetime.now().strftime("%Y-%m-%d")
     embeds, omitted_count = digest_format.build_digest_embeds(digest, channel_title, date_str)
 
     all_ok = True
+    sent = 0
     for i, embed in enumerate(embeds):
         ok, status, err = send_webhook(webhook_url, embed)
         if ok:
+            sent += 1
             logger.info("[%s] 彙整推播成功（訊息 %d/%d）", key, i + 1, len(embeds))
         else:
             all_ok = False
             logger.error("[%s] 彙整推播失敗（訊息 %d/%d）：HTTP %s %s", key, i + 1, len(embeds), status, err)
+
+    # 一則都沒送出才退回重試；送出一部分時重試會重複推已送出的那則，維持原狀。
+    if sent == 0:
+        dropped = db.discard_unsent_items([item["item_id"] for item in new_items])
+        logger.error("[%s] 彙整全部推播失敗，已退回 %d 則項目，下次執行重試", key, dropped)
+        return False
 
     # 收錄進訊息的重點對應到的items一律標published；篇幅省略的另外標記，
     # 兩者都不是「還沒處理過」，避免dedup之外還被誤判成待推播。

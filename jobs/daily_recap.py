@@ -46,7 +46,7 @@ def run_daily_recap():
     summary = ai_insight.build_meta_summary(angle, reports)
     if not summary:
         logger.error("[%s] Gemini彙整失敗（額度用盡/網路錯誤/回應格式不對），本次略過推播", key)
-        return
+        return False
 
     channel_title = "每日晨間快報"
     embeds, omitted_count = digest_format.build_digest_embeds(summary, channel_title, yesterday_str)

@@ -11,10 +11,15 @@ import digest_format
 
 logger = logging.getLogger("main")
 
+# 2026-10-04：台股/幣圈大總結刪除(那是AI再摘要AI的產出，原本用途是餵AI
+# 交易決策，交易已改規則式)，改直接讀3個合併後的彙整頻道，加上原本只透過
+# 大總結間接進來的兩個規則式報告(FRED總經指標、0050權值股追蹤)。
 DAILY_RECAP_SOURCES = [
-    ("digest_report.tw_stock_meta", "台股大總結"),
-    ("digest_report.crypto_meta", "幣圈大總結"),
-    ("digest_report.semi_supply_chain_digest", "半導體供應鏈"),
+    ("digest_report.us_macro_digest", "美股與總經"),
+    ("digest_report.tw_semi_digest", "台股與半導體"),
+    ("digest_report.crypto_digest", "加密貨幣"),
+    ("fred.macro_indicators", "總經指標追蹤"),
+    ("stockintelli.tracking", "台股權值股追蹤"),
 ]
 
 

@@ -53,21 +53,15 @@ TASKS = {
     "etf0050": (["main.py", "--source", "etf0050"], 9, WEEKDAYS),
     "tw_stock_portfolio": (["main.py", "--source", "tw_stock_portfolio"], 15, WEEKDAYS),
     "scholarship": (["main.py", "--scholarship"], 20, None),
-    "cbc_digest": (["main.py", "--source", "cbc_digest"], 20, None),
-    "crypto_digest": (["main.py", "--source", "crypto_digest"], 20, None),
-    "geopolitics_digest": (["main.py", "--source", "geopolitics_digest"], 20, None),
-    # Substack digests are spread over 19/20/21 (was all at 20): from runner IPs Substack
-    # answers with a Cloudflare challenge and they go through rss2json, which 429s after
-    # ~10 keyless calls in a row (2026-09-24). us_stock 5 feeds, crypto 4 + geopolitics 1,
-    # macro_tech 4 -> at most 5 calls per tick, so no rss2json account is needed.
-    "macro_tech_digest": (["main.py", "--source", "macro_tech_digest"], 21, None),
-    "semi_supply_chain_digest": (["main.py", "--source", "semi_supply_chain_digest"], 20, None),
-    "tsmc_digest": (["main.py", "--source", "tsmc_digest"], 20, None),
-    "us_stock_digest": (["main.py", "--source", "us_stock_digest"], 19, None),
-    # rental_search deliberately not scheduled: data.moi.gov.tw has timed out 20+ runs
-    # in a row locally and from runners (2026-09-24); re-add once the source is fixed.
-    "crypto_meta": (["main.py", "--source", "crypto_meta"], 21, None),
-    "tw_stock_meta": (["main.py", "--source", "tw_stock_meta"], 21, None),
+    # Three digests since 2026-10-04 (were seven, plus two AI-on-AI meta summaries).
+    # Substack digests sit in different hours: from runner IPs Substack answers with a
+    # Cloudflare challenge and they go through rss2json, which 429s after ~10 keyless
+    # calls in a row (2026-09-24). crypto 4 feeds at 19, us_macro 9 feeds at 20 -> under
+    # 10 per hourly tick. If only the fallback cron fires, one tick may run both (13
+    # calls); set RSS2JSON_API_KEY if that starts failing.
+    "crypto_digest": (["main.py", "--source", "crypto_digest"], 19, None),
+    "us_macro_digest": (["main.py", "--source", "us_macro_digest"], 20, None),
+    "tw_semi_digest": (["main.py", "--source", "tw_semi_digest"], 20, None),
     # Was 23: catch-up only covers the same Taipei day and the last fallback tick is
     # ~21:43, so a 23:00 task ran once in 8 days (2026-10-04). It is a rule-only
     # "no change today" notice, so an earlier slot loses nothing.

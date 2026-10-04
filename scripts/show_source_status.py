@@ -25,7 +25,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from jobs.engine import SOURCE_REGISTRY
 from jobs.digest import DIGEST_CHANNELS
-from jobs.meta_summary import META_SUMMARY_CHANNELS
 from jobs.portfolio import PORTFOLIO_CHANNELS
 from jobs.scholarship import SCHOLARSHIP_REGISTRY
 from jobs.internship import INTERNSHIP_REGISTRY
@@ -55,9 +54,6 @@ def main():
     _print_section("晚間彙整頻道(DIGEST_CHANNELS)", [
         (key, info["channel_title"]) for key, info in DIGEST_CHANNELS.items()
     ])
-    _print_section("大總結頻道(META_SUMMARY_CHANNELS)", [
-        (key, info["channel_title"]) for key, info in META_SUMMARY_CHANNELS.items()
-    ])
     _print_section("模擬持倉頻道(PORTFOLIO_CHANNELS)", [
         (key, info["channel_title"]) for key, info in PORTFOLIO_CHANNELS.items()
     ])
@@ -69,7 +65,7 @@ def main():
     ])
     _print_section("獨立來源(main.py特例分派，非registry)", list(STANDALONE_SOURCES.items()))
 
-    total = (len(SOURCE_REGISTRY) + len(DIGEST_CHANNELS) + len(META_SUMMARY_CHANNELS)
+    total = (len(SOURCE_REGISTRY) + len(DIGEST_CHANNELS)
              + len(PORTFOLIO_CHANNELS) + len(SCHOLARSHIP_REGISTRY) + len(INTERNSHIP_REGISTRY)
              + len(STANDALONE_SOURCES))
     print(f"\n共 {total} 個來源/頻道。完整用法：python main.py --help")

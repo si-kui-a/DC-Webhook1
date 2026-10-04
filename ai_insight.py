@@ -296,4 +296,3 @@ def build_meta_summary(angle: str, channel_reports: list[dict]) -> dict | None:
     except Exception as e:
         logger.warning(f"gemini大總結彙整失敗: {e}")
         return None
-

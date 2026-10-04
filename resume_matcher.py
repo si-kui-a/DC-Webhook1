@@ -33,9 +33,6 @@ import json
 import logging
 import os
 import re
-import time
-import urllib.error
-import urllib.request
 from pathlib import Path
 
 import jieba
@@ -49,12 +46,11 @@ from dotenv import load_dotenv
 load_dotenv()
 
 import db
+import gemini_client
 from scrapers import internship_mol
 
 logger = logging.getLogger("resume_matcher")
 
-MAX_RETRIES = 3
-BASE_BACKOFF_SECONDS = 2
 TIMEOUT_SECONDS = 30
 
 # 避免超長履歷(含雜訊/重複格式化字元)把prompt灌爆，前6000字已足夠代表
@@ -156,26 +152,6 @@ def resume_health_check(resume_text: str) -> list[str]:
     return notes
 
 
-def _with_retry(fn):
-    """對429/5xx/網路錯誤重試,4xx等客戶端錯誤直接往外拋——比照ai_insight.py
-    的既有模式，各模組各自持有一份(專案既有慣例，見price_feed.py
-    ._get_with_retry())，不跨模組import private helper。"""
-    last_exc = None
-    for attempt in range(MAX_RETRIES):
-        try:
-            return fn()
-        except urllib.error.HTTPError as e:
-            last_exc = e
-            if e.code not in (429, 500, 502, 503, 504) or attempt == MAX_RETRIES - 1:
-                raise
-        except urllib.error.URLError as e:
-            last_exc = e
-            if attempt == MAX_RETRIES - 1:
-                raise
-        time.sleep(BASE_BACKOFF_SECONDS * (2 ** attempt))
-    raise last_exc  # pragma: no cover
-
-
 def extract_text(file_path: str) -> str:
     """依副檔名解析履歷檔案為純文字。不支援的格式/解析失敗直接拋出例外，
     呼叫端(CLI/bot)自行決定如何呈現錯誤訊息給使用者，這裡不吞例外——
@@ -239,24 +215,8 @@ def evaluate_specific_match(resume_text: str, job_text: str) -> dict | None:
         '只回傳JSON,格式:{"fit_summary": "...", "resume_advice": "..."}'
     )
 
-    url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent"
-    body = json.dumps({
-        "contents": [{"role": "user", "parts": [{"text": prompt}]}],
-        "generationConfig": {"temperature": 0.3, "responseMimeType": "application/json"},
-    }).encode("utf-8")
-    req = urllib.request.Request(
-        url, data=body,
-        headers={"Content-Type": "application/json", "x-goog-api-key": api_key},
-        method="POST",
-    )
-
-    def _do():
-        with urllib.request.urlopen(req, timeout=TIMEOUT_SECONDS) as resp:
-            return json.loads(resp.read().decode("utf-8"))
-
     try:
-        data = _with_retry(_do)
-        text = data["candidates"][0]["content"]["parts"][0]["text"]
+        text = gemini_client.call_json_text(prompt, temperature=0.3, timeout=TIMEOUT_SECONDS)
         parsed = json.loads(text)
         fit_summary = str(parsed.get("fit_summary", "")).strip()
         resume_advice = str(parsed.get("resume_advice", "")).strip()
@@ -314,24 +274,8 @@ def match_and_advise(resume_text: str) -> dict | None:
         "最多5筆，全部不適合就回傳空陣列)"
     )
 
-    url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent"
-    body = json.dumps({
-        "contents": [{"role": "user", "parts": [{"text": prompt}]}],
-        "generationConfig": {"temperature": 0.3, "responseMimeType": "application/json"},
-    }).encode("utf-8")
-    req = urllib.request.Request(
-        url, data=body,
-        headers={"Content-Type": "application/json", "x-goog-api-key": api_key},
-        method="POST",
-    )
-
-    def _do():
-        with urllib.request.urlopen(req, timeout=TIMEOUT_SECONDS) as resp:
-            return json.loads(resp.read().decode("utf-8"))
-
     try:
-        data = _with_retry(_do)
-        text = data["candidates"][0]["content"]["parts"][0]["text"]
+        text = gemini_client.call_json_text(prompt, temperature=0.3, timeout=TIMEOUT_SECONDS)
         parsed = json.loads(text)
         indices = parsed.get("match_indices", [])
         reasons = parsed.get("match_reasons", [])

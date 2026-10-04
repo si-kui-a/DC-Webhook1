@@ -14,35 +14,18 @@ ai_insight.py — fed/tsmc（英文機構新聞稿）專用的Gemini免費層輔
 import json
 import logging
 import os
-import time
 import urllib.error
 import urllib.request
+
+import gemini_client
 
 logger = logging.getLogger("ai_insight")
 
 ALLOWED_SENTIMENTS = ("利多", "利空", "中性")
-MAX_RETRIES = 3
-BASE_BACKOFF_SECONDS = 2
 TIMEOUT_SECONDS = 30
 
-
-def _with_retry(fn):
-    """對429/5xx/網路錯誤重試,4xx等客戶端錯誤(如API key無效)不重試,
-    直接往外拋——重試也不會變好,白等徒增延遲。"""
-    last_exc = None
-    for attempt in range(MAX_RETRIES):
-        try:
-            return fn()
-        except urllib.error.HTTPError as e:
-            last_exc = e
-            if e.code not in (429, 500, 502, 503, 504) or attempt == MAX_RETRIES - 1:
-                raise
-        except urllib.error.URLError as e:
-            last_exc = e
-            if attempt == MAX_RETRIES - 1:
-                raise
-        time.sleep(BASE_BACKOFF_SECONDS * (2 ** attempt))
-    raise last_exc  # pragma: no cover
+# Retry rules live in gemini_client.py (shared with resume_matcher.py).
+_with_retry = gemini_client.with_retry
 
 
 # ── GPT備援(僅供非交易用途:翻譯/情緒判斷、頻道彙整、大總結) ──────────────
@@ -52,24 +35,7 @@ def _call_gemini_json_text(prompt: str, temperature: float, timeout: int) -> str
     """呼叫Gemini generateContent,回傳AI原始回應文字(未parse JSON)。
     失敗時原樣往外拋(HTTPError/URLError等),不吞例外,由_call_ai_json_text
     決定要不要切GPT。"""
-    api_key = os.getenv("GEMINI_API_KEY", "")
-    url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent"
-    body = json.dumps({
-        "contents": [{"role": "user", "parts": [{"text": prompt}]}],
-        "generationConfig": {"temperature": temperature, "responseMimeType": "application/json"},
-    }).encode("utf-8")
-    req = urllib.request.Request(
-        url, data=body,
-        headers={"Content-Type": "application/json", "x-goog-api-key": api_key},
-        method="POST",
-    )
-
-    def _do():
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            return json.loads(resp.read().decode("utf-8"))
-
-    data = _with_retry(_do)
-    return data["candidates"][0]["content"]["parts"][0]["text"]
+    return gemini_client.call_json_text(prompt, temperature=temperature, timeout=timeout)
 
 
 def _call_openai_json_text(prompt: str, temperature: float, timeout: int) -> str:
@@ -524,24 +490,8 @@ def build_trade_decision(angle: str, portfolio: dict, positions: list[dict],
         '"below": 0.0}], "news_keywords": ["..."], "reasoning": "..."}}'
     )
 
-    url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent"
-    body = json.dumps({
-        "contents": [{"role": "user", "parts": [{"text": prompt}]}],
-        "generationConfig": {"temperature": 0.3, "responseMimeType": "application/json"},
-    }).encode("utf-8")
-    req = urllib.request.Request(
-        url, data=body,
-        headers={"Content-Type": "application/json", "x-goog-api-key": api_key},
-        method="POST",
-    )
-
-    def _do():
-        with urllib.request.urlopen(req, timeout=DIGEST_TIMEOUT_SECONDS) as resp:
-            return json.loads(resp.read().decode("utf-8"))
-
     try:
-        data = _with_retry(_do)
-        text = data["candidates"][0]["content"]["parts"][0]["text"]
+        text = gemini_client.call_json_text(prompt, temperature=0.3, timeout=DIGEST_TIMEOUT_SECONDS)
         parsed = json.loads(text)
         raw_actions = parsed.get("actions", [])
         if not isinstance(raw_actions, list):
@@ -605,26 +555,10 @@ def assess_stop_loss(position: dict, portfolio: dict, trigger_reason: str) -> di
         '只回傳JSON，格式:{"cut": true|false, "reasoning": "一句話說明理由"}'
     )
 
-    url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent"
-    body = json.dumps({
-        "contents": [{"role": "user", "parts": [{"text": prompt}]}],
-        "generationConfig": {"temperature": 0.3, "responseMimeType": "application/json"},
-    }).encode("utf-8")
-    req = urllib.request.Request(
-        url, data=body,
-        headers={"Content-Type": "application/json", "x-goog-api-key": api_key},
-        method="POST",
-    )
-
-    def _do():
-        with urllib.request.urlopen(req, timeout=TIMEOUT_SECONDS) as resp:
-            return json.loads(resp.read().decode("utf-8"))
-
     try:
-        data = _with_retry(_do)
-        text = data["candidates"][0]["content"]["parts"][0]["text"]
+        text = gemini_client.call_json_text(prompt, temperature=0.3, timeout=TIMEOUT_SECONDS)
         parsed = json.loads(text)
-        cut = parsed.get("cut")
+        cut =parsed.get("cut")
         if not isinstance(cut, bool):
             return None
         return {"cut": cut, "reasoning": str(parsed.get("reasoning", "")).strip()}

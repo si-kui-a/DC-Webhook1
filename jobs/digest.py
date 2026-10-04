@@ -273,8 +273,6 @@ def run_digest_channel(key: str):
         return
 
     webhook_url = os.getenv(webhook_env)
-    if key == "rental_search" and not webhook_url:
-        webhook_url = os.getenv("WEBHOOK_HOUSE_591")
     if not webhook_url:
         logger.error("[%s] 缺少環境變數 %s，跳過", key, webhook_env)
         return

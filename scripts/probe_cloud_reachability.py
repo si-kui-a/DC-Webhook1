@@ -39,8 +39,9 @@ TARGETS = [
     ("scrapers.substack_generic", "fetch_all"),
 ]
 
-# rental_search needs RENTAL_FEED_URLS from .env, so probe its host directly.
-RAW_URLS = ["https://data.moi.gov.tw/"]
+# Hosts probed directly (no scraper module). Empty since rental_search was removed
+# on 2026-10-04 (data.moi.gov.tw kept timing out).
+RAW_URLS: list[str] = []
 
 
 def main() -> int:

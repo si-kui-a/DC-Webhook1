@@ -36,7 +36,6 @@ TARGETS = [
     ("scrapers.semi_supply_chain", "fetch"),
     ("scrapers.tsmc", "fetch"),
     ("scrapers.fed", "fetch"),
-    ("scrapers.us_customer_feeds", "fetch_all"),
     ("scrapers.substack_generic", "fetch_all"),
 ]
 

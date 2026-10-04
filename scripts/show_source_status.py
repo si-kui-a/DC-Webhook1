@@ -34,9 +34,8 @@ from jobs.internship import INTERNSHIP_REGISTRY
 # 共用registry可以內省，數量少且穩定，比為了3-4個項目额外設計一層抽象
 # 來源更簡單直接。main.py新增這類特例時記得順手補一行。
 STANDALONE_SOURCES = {
-    "daily_recap": "每日晨間快報(彙整昨日大總結)",
+    "daily_recap": "每日晨間快報(彙整昨日3個彙整頻道)",
     "crypto_nightly_recap": "幣圈模擬持倉夜間回顧",
-    "sig_content_watch": "留德網站(sig)內容維護監測(死連結/過期提醒)",
     "thu_calendar": "東海大學當期學期行事曆合併+Telegram提醒",
 }
 

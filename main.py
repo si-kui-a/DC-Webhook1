@@ -41,7 +41,7 @@ import summarizer_en
 import summarizer_zh
 import notify_telegram
 from push_webhook import build_embed, send_webhook
-from scrapers import tsmc, fed, cbc, etf0050, macro_fred, twse_financials, rental_search
+from scrapers import tsmc, fed, cbc, etf0050, macro_fred, twse_financials
 from scrapers.contracts import validate_items
 from scrapers.health import record as record_source_health
 from scrapers import substack_generic
@@ -54,7 +54,6 @@ from scrapers import internship_104
 from scrapers import internship_rich
 from scrapers import internship_yes123
 from scrapers import internship_util
-from scrapers import sig_content_watch
 
 from jobs.paths import WORK_DIR
 from jobs.engine import SOURCE_REGISTRY, run_source
@@ -63,7 +62,6 @@ from jobs.internship import run_internship
 from jobs.digest import DIGEST_CHANNELS, run_digest_channel
 from jobs.daily_recap import run_daily_recap
 from jobs.portfolio import PORTFOLIO_CHANNELS, run_portfolio_channel
-from jobs.sig_watch import run_sig_content_watch
 from jobs.crypto_recap import run_crypto_nightly_recap
 from jobs.thu_calendar import run_thu_calendar
 _LOG_FORMAT = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
@@ -86,7 +84,7 @@ logger = logging.getLogger("main")
 load_dotenv()
 def main():
     parser = argparse.ArgumentParser(description="本地爬蟲 → Discord Webhook 推播")
-    parser.add_argument("--source", choices=list(SOURCE_REGISTRY.keys()) + ["all", "daily_recap", "crypto_nightly_recap", "sig_content_watch", "thu_calendar"]
+    parser.add_argument("--source", choices=list(SOURCE_REGISTRY.keys()) + ["all", "daily_recap", "crypto_nightly_recap", "thu_calendar"]
                                      + list(DIGEST_CHANNELS.keys())
                                      + list(PORTFOLIO_CHANNELS.keys()),
                         help="執行單一來源（與 --scholarship 二選一）")
@@ -132,7 +130,7 @@ def main():
         # 省略，見各自docstring既有容錯設計)，twse_tsmc/twse_chunghwa/fed
         # 本來就是Daily，統一每天執行不影響功能，順便省掉平日/每日兩種
         # 排程頻率的差異。
-        for key in ("fed", "etf0050", "macro_fred", "twse_tsmc", "twse_chunghwa", "rental_search"):
+        for key in ("fed", "etf0050", "macro_fred", "twse_tsmc", "twse_chunghwa"):
             # run_source()本身已有完整try/except(既有設計)，這裡再包一層
             # 純粹是跟--digest-all/--meta-all維持同一種批次防護風格一致。
             try:
@@ -151,8 +149,6 @@ def main():
         return 1 if run_daily_recap() is False else 0
     elif args.source == "crypto_nightly_recap":
         run_crypto_nightly_recap()
-    elif args.source == "sig_content_watch":
-        run_sig_content_watch()
     elif args.source == "thu_calendar":
         run_thu_calendar()
     elif args.source == "all":

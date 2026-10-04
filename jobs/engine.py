@@ -8,7 +8,7 @@ import summarizer_en
 import summarizer_zh
 import notify_telegram
 from push_webhook import build_embed, send_webhook
-from scrapers import tsmc, fed, etf0050, macro_fred, twse_financials, rental_search
+from scrapers import tsmc, fed, etf0050, macro_fred, twse_financials
 from scrapers.contracts import validate_items
 from scrapers.health import record as record_source_health
 from jobs.paths import SOURCE_HEALTH_PATH
@@ -28,7 +28,6 @@ SOURCE_REGISTRY = {
                   twse_financials.SOURCE_NAME_TSMC, twse_financials.SOURCE_ID_TSMC),
     "twse_chunghwa": (twse_financials.fetch_chunghwa, "WEBHOOK_CHUNGHWA",
                       twse_financials.SOURCE_NAME_CHUNGHWA, twse_financials.SOURCE_ID_CHUNGHWA),
-    "rental_search": (rental_search.fetch, "WEBHOOK_RENTAL_SEARCH", rental_search.SOURCE_NAME, rental_search.SOURCE_ID),
 }
 # 連續失敗超過此次數，視為需要人工介入（用於未來接外部告警，本 MVP 先只記 log）
 FAIL_THRESHOLD = 3
@@ -82,8 +81,6 @@ def run_source(key: str):
 
     fetch_fn, webhook_env, source_name, source_id = SOURCE_REGISTRY[key]
     webhook_url = os.getenv(webhook_env)
-    if key == "rental_search" and not webhook_url:
-        webhook_url = os.getenv("WEBHOOK_HOUSE_591")
     if not webhook_url:
         logger.error(f"缺少環境變數 {webhook_env}，跳過 {key}")
         _record_summary(key, how, f"失敗，缺少環境變數 {webhook_env}")

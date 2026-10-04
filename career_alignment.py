@@ -214,6 +214,27 @@ def format_report_text(result: dict) -> str:
     return "\n".join(lines)
 
 
+def extract_text(file_path: str) -> str:
+    """依副檔名解析履歷檔案為純文字(pdf/docx/txt/md)。2026-10-04從已刪除的
+    resume_matcher.py搬來(該檔與resume_bot.py一起移除)，失敗直接拋例外，
+    履歷解析失敗使用者一定要知道，不能靜默退化。"""
+    path = Path(file_path)
+    if not path.exists():
+        raise FileNotFoundError(f"找不到檔案：{file_path}")
+    suffix = path.suffix.lower()
+    if suffix == ".pdf":
+        import pypdf
+        reader = pypdf.PdfReader(str(path))
+        return "\n".join(page.extract_text() or "" for page in reader.pages)
+    if suffix == ".docx":
+        import docx
+        doc = docx.Document(str(path))
+        return "\n".join(p.text for p in doc.paragraphs)
+    if suffix in (".txt", ".md"):
+        return path.read_text(encoding="utf-8", errors="replace")
+    raise ValueError(f"不支援的履歷格式：{suffix}（支援pdf/docx/txt/md）")
+
+
 if __name__ == "__main__":
     import sys
     if sys.platform == "win32":
@@ -221,8 +242,7 @@ if __name__ == "__main__":
     if len(sys.argv) < 2:
         print("用法：python career_alignment.py <履歷檔案路徑>", file=sys.stderr)
         sys.exit(1)
-    import resume_matcher
-    text = resume_matcher.extract_text(sys.argv[1])
+    text = extract_text(sys.argv[1])
     err = pull_latest()
     if err:
         print(f"警告：career-profile git pull失敗，沿用本機既有清單：{err}", file=sys.stderr)

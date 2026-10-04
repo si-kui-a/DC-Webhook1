@@ -26,6 +26,3 @@ networkx>=3.0
 pypdf>=6.0
 python-docx>=1.2
 
-# resume_bot.py（履歷配對Discord常駐bot）：唯一需要WebSocket常駐連線的
-# 功能，跟其餘scrapers/main.py的排程批次架構不同，見resume_bot.py docstring。
-discord.py>=2.7

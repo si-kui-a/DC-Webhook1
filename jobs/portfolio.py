@@ -28,14 +28,14 @@ PORTFOLIO_CHANNELS = {
         "portfolio_id": "tw_stock",
         "webhook_env": "WEBHOOK_PORTFOLIO_TW_STOCK",
         "channel_title": "模擬持倉－台股",
-        "meta_source_id": "digest_report.tw_stock_meta",
+        "meta_source_id": "digest_report.tw_semi_digest",
         "angle": "台股現貨帳戶,只能做多(side必須是long),leverage固定為1,不可放空。",
     },
     "crypto_futures_portfolio": {
         "portfolio_id": "crypto_futures",
         "webhook_env": "WEBHOOK_PORTFOLIO_CRYPTO_FUTURES",
         "channel_title": "模擬持倉－幣圈合約",
-        "meta_source_id": "digest_report.crypto_meta",
+        "meta_source_id": "digest_report.crypto_digest",
         "angle": "幣圈合約帳戶,可做多可做空(side可為long或short),可使用槓桿"
                  "(leverage可大於1,但務必評估清算風險,不要無節制放大槓桿)。",
     },
@@ -43,7 +43,7 @@ PORTFOLIO_CHANNELS = {
         "portfolio_id": "crypto_discretionary",
         "webhook_env": "WEBHOOK_PORTFOLIO_CRYPTO_DISCRETIONARY",
         "channel_title": "模擬持倉－幣圈自主判斷",
-        "meta_source_id": "digest_report.crypto_meta",
+        "meta_source_id": "digest_report.crypto_digest",
         "angle": "幣圈現貨帳戶,只能做多(side必須是long),leverage固定為1,不可放空、不可用槓桿。",
     },
 }

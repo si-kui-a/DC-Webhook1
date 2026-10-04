@@ -7,15 +7,9 @@ main.py — 主執行入口。
     python main.py --source macro_fred
     python main.py --source twse_tsmc
     python main.py --source twse_chunghwa
-    python main.py --source us_stock_digest
+    python main.py --source us_macro_digest
     python main.py --source crypto_digest
-    python main.py --source macro_tech_digest
-    python main.py --source geopolitics_digest
-    python main.py --source tsmc_digest
-    python main.py --source cbc_digest
-    python main.py --source semi_supply_chain_digest
-    python main.py --source tw_stock_meta
-    python main.py --source crypto_meta
+    python main.py --source tw_semi_digest
     python main.py --source daily_recap
     python main.py --source thu_calendar
     python main.py --source all
@@ -67,7 +61,6 @@ from jobs.engine import SOURCE_REGISTRY, run_source
 from jobs.scholarship import run_scholarship
 from jobs.internship import run_internship
 from jobs.digest import DIGEST_CHANNELS, run_digest_channel
-from jobs.meta_summary import META_SUMMARY_CHANNELS, run_meta_summary_channel
 from jobs.daily_recap import run_daily_recap
 from jobs.portfolio import PORTFOLIO_CHANNELS, run_portfolio_channel
 from jobs.sig_watch import run_sig_content_watch
@@ -94,7 +87,7 @@ load_dotenv()
 def main():
     parser = argparse.ArgumentParser(description="本地爬蟲 → Discord Webhook 推播")
     parser.add_argument("--source", choices=list(SOURCE_REGISTRY.keys()) + ["all", "daily_recap", "crypto_nightly_recap", "sig_content_watch", "thu_calendar"]
-                                     + list(DIGEST_CHANNELS.keys()) + list(META_SUMMARY_CHANNELS.keys())
+                                     + list(DIGEST_CHANNELS.keys())
                                      + list(PORTFOLIO_CHANNELS.keys()),
                         help="執行單一來源（與 --scholarship 二選一）")
     parser.add_argument("--scholarship", action="store_true",
@@ -107,18 +100,16 @@ def main():
     # 裡的任務數從22個減到約11個，見docs/scheduled_task_consolidation.md。
     parser.add_argument("--digest-all", action="store_true",
                         help="批次執行所有晚間彙整頻道(20:00)")
-    parser.add_argument("--meta-all", action="store_true",
-                        help="批次執行所有大總結頻道(20:30)")
     parser.add_argument("--daily-official", action="store_true",
                         help="批次執行所有平日官方資料來源(fed/etf0050/macro_fred/twse_tsmc/twse_chunghwa,09:00)")
     args = parser.parse_args()
 
-    flags = (args.source, args.scholarship, args.internship, args.digest_all, args.meta_all, args.daily_official)
+    flags = (args.source, args.scholarship, args.internship, args.digest_all, args.daily_official)
     if not any(flags):
         parser.print_help()
         sys.exit(1)
     if sum(bool(x) for x in flags) > 1:
-        parser.error("--source / --scholarship / --internship / --digest-all / --meta-all / --daily-official 六者互斥，一次只能選一個")
+        parser.error("--source / --scholarship / --internship / --digest-all / --daily-official 五者互斥，一次只能選一個")
 
     db.init_db()
 
@@ -134,12 +125,6 @@ def main():
         for key in DIGEST_CHANNELS:
             try:
                 run_digest_channel(key)
-            except Exception:
-                logger.error(f"[{key}] 執行時發生未預期例外，跳過此頻道", exc_info=True)
-    elif args.meta_all:
-        for key in META_SUMMARY_CHANNELS:
-            try:
-                run_meta_summary_channel(key)
             except Exception:
                 logger.error(f"[{key}] 執行時發生未預期例外，跳過此頻道", exc_info=True)
     elif args.daily_official:
@@ -160,8 +145,6 @@ def main():
     # that already succeeded.
     elif args.source in DIGEST_CHANNELS:
         return 1 if run_digest_channel(args.source) is False else 0
-    elif args.source in META_SUMMARY_CHANNELS:
-        return 1 if run_meta_summary_channel(args.source) is False else 0
     elif args.source in PORTFOLIO_CHANNELS:
         run_portfolio_channel(args.source)
     elif args.source == "daily_recap":

@@ -80,7 +80,11 @@ def _normalize_substack(raw: dict) -> dict:
 #   summarize_fn  -> raw -> str|None（真正花運算資源的部分，只對「確認
 #                     真的要用」的項目呼叫一次）
 #   source_ids    -> 供首次執行閘門判斷用
-DIGEST_CHANNELS = {
+#
+# 2026-10-04起這些是「零件」，不再各自是頻道：7個頻道併成3個(見下方
+# DIGEST_CHANNELS)，AI呼叫從每天7次降到3次。各零件的抓取/正規化/摘要
+# 邏輯原封不動，source_id也不變，所以去重紀錄延續，合併後不會重推舊文。
+_PARTS = {
     "us_stock_digest": {
         "webhook_env": "WEBHOOK_ANALYST_EASYPOINT",
         "channel_title": "美股個股/技術分析統整",
@@ -174,6 +178,62 @@ DIGEST_CHANNELS = {
         "summarize_fn": lambda raw: None,
         "source_ids": semi_supply_chain.SOURCE_IDS,
     },
+}
+
+
+def _combine(channel_title: str, webhook_env: str, angle: str, part_keys: list[str]) -> dict:
+    """把多個零件組成一個頻道設定。每筆raw標上來自哪個零件(_part)，
+    normalize/summarize照原零件的函式處理。單一零件抓取失敗只記錄、不拖垮
+    其他零件；全部失敗才往外拋，交給run_digest_channel回報失敗重試。"""
+    parts = [_PARTS[k] for k in part_keys]
+
+    def fetch():
+        items, errors = [], []
+        for key, part in zip(part_keys, parts):
+            try:
+                items.extend({**raw, "_part": key} for raw in part["fetch_fn"]())
+            except Exception as e:
+                logger.error("[%s] 零件 %s 抓取失敗：%s", channel_title, key, e, exc_info=True)
+                errors.append(e)
+        if len(errors) == len(parts):
+            raise errors[0]
+        return items
+
+    return {
+        "webhook_env": webhook_env,
+        "channel_title": channel_title,
+        "angle": angle,
+        "fetch_fn": fetch,
+        "normalize_fn": lambda raw: _PARTS[raw["_part"]]["normalize_fn"](raw),
+        "summarize_fn": lambda raw: _PARTS[raw["_part"]]["summarize_fn"](raw),
+        "source_ids": [sid for part in parts for sid in part["source_ids"]],
+    }
+
+
+# crypto_digest原樣保留；兩個新頻道的webhook沿用該組其中一個舊頻道(webhook綁頻道ID，
+# Discord上改頻道名稱即可，不用換secret)。geopolitics零件不列入：它唯一的來源
+# princetonchen跟macro_tech零件抓的是同一個feed，合併後會重複；地緣政治角度改寫
+# 進angle。
+DIGEST_CHANNELS = {
+    "crypto_digest": _PARTS["crypto_digest"],
+    "us_macro_digest": _combine(
+        "美股與總經",
+        "WEBHOOK_ANALYST_EASYPOINT",
+        "分成三塊整理：(1)美股個股/類股技術面、進出場邏輯與各作者操作策略；"
+        "(2)總體經濟數據、台灣央行政策(利率/匯率)與科技產業(AI/雲端/半導體)"
+        "中長線趨勢對配置的啟示；(3)地緣政治、國安/科技管制、供應鏈安全對"
+        "產業與市場的衝擊路徑。跨頻來源只抽取跟這三塊相關的段落，不含幣圈"
+        "鏈上細節。目標是讓讀者幾分鐘內知道今天美股與總經面發生了什麼。",
+        ["us_stock_digest", "macro_tech_digest", "cbc_digest"],
+    ),
+    "tw_semi_digest": _combine(
+        "台股與半導體",
+        "WEBHOOK_INSTITUTIONAL_TSMC",
+        "台積電公司重大訊息(財報、法說會、股東會、購併/合作)，以及台積電上下游"
+        "台廠供應鏈(封測/設備/材料)的產能、訂單、投資動態。目標是讓讀者知道"
+        "台股半導體上下游今天有哪些變化，不做投資建議。",
+        ["tsmc_digest", "semi_supply_chain_digest"],
+    ),
 }
 
 # 首次執行安全閘門：多來源合併的digest pipeline第一次跑時，各來源的RSS
@@ -329,9 +389,8 @@ def run_digest_channel(key: str):
         )
 
         # 存檔這次彙整的完整文字(獨立的digest_report.*命名空間,不影響原本
-        # 文章來源的dedup)，供大總結頻道(run_meta_summary_channel)之後
-        # 讀取當天各頻道已產出的內容——AI敘事彙整頻道原本產出後只推播、
-        # 沒有存檔，這是新增的持久化機制。
+        # 文章來源的dedup)，供隔天晨間快報(jobs/daily_recap.py)讀取前一天
+        # 各頻道已產出的內容。
         report_text = digest["overview"] + "\n\n" + "\n".join(
             f"【{p['category']}】{p['point']}" for p in digest["points"]
         )

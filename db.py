@@ -170,7 +170,7 @@ def update_summary(item_id: str, summary: str):
 def get_summary_for_date(source_id: str, published_at: str) -> str | None:
     """依source_id+published_at取回該筆的summary全文,供大總結頻道讀取
     「當天某頻道已經產出的完整報告內容」(不重新抓取原始資料，直接沿用
-    既有的item.summary，見main.py run_meta_summary_channel)。多筆符合時
+    既有的item.summary，見jobs/daily_recap.py)。多筆符合時
     取最新寫入的一筆。"""
     conn = get_conn()
     row = conn.execute(

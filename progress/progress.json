@@ -1,0 +1,8 @@
+{
+  "status": [
+    {
+      "label": "離線測試",
+      "command": "python C:/Projects/_scripts/run_tests.py ."
+    }
+  ]
+}

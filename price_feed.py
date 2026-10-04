@@ -170,18 +170,35 @@ def _get_tw_stock_history(code: str) -> list[float] | None:
     return prices
 
 
-def _get_crypto_history(symbol: str, days: int = 20) -> list[float] | None:
-    data = _get_with_retry(BINANCE_KLINES_URL, params={
-        "symbol": f"{symbol.upper()}USDT",
-        "interval": "1d",
-        "limit": days,
-    })
+# Live and backtest.py compute indicators from the same window length, so a backtest
+# signal is exactly what the live run would have seen. 60 bars cover SMA20 and MACD(12,26,9).
+CRYPTO_HISTORY_DAYS = 60
+
+
+def get_crypto_daily_bars(symbol: str, start_ms: int | None = None, limit: int = 1000) -> list[dict] | None:
+    """Closed daily bars from Binance, oldest first: {open_ms, open, high, low, close}.
+    The bar still forming is dropped: Binance returns it last, and averaging a half-day
+    close made SMA5 flip within a day (2026-10-04 review)."""
+    params = {"symbol": f"{symbol.upper()}USDT", "interval": "1d", "limit": limit}
+    if start_ms is not None:
+        params["startTime"] = start_ms
+    data = _get_with_retry(BINANCE_KLINES_URL, params=params)
     if not isinstance(data, list) or not data:
         return None
+    now_ms = time.time() * 1000
     try:
-        return [float(row[4]) for row in data]  # index 4 = close price
+        return [
+            {"open_ms": int(r[0]), "open": float(r[1]), "high": float(r[2]),
+             "low": float(r[3]), "close": float(r[4])}
+            for r in data if int(r[6]) < now_ms  # index 6 = close time
+        ] or None
     except (IndexError, ValueError, TypeError):
         return None
+
+
+def _get_crypto_history(symbol: str, days: int = CRYPTO_HISTORY_DAYS) -> list[float] | None:
+    bars = get_crypto_daily_bars(symbol, limit=days + 1)  # +1: the forming bar is dropped
+    return [b["close"] for b in bars[-days:]] if bars else None
 
 
 def get_price_history(symbol: str) -> list[float] | None:
@@ -227,15 +244,18 @@ def _compute_bollinger(history: list[float], period: int = 20, num_std: float = 
     }
 
 
-def get_technical_snapshot(symbol: str) -> dict | None:
-    """回傳symbol的技術指標快照(SMA5/SMA20/5日與20日漲跌%/RSI14/布林通道),
-    純程式計算不耗AI額度,給AI具體數字而非只有敘事文字可判斷。資料不足以算
-    某個指標就省略該欄位,不報錯(比照scrapers/etf0050.py._check_ma_support()
-    的既有降級模式)。完全查無歷史資料回傳None。"""
-    history = get_price_history(symbol)
-    if not history:
-        return None
+def _ema(values: list[float], period: int) -> list[float]:
+    k = 2 / (period + 1)
+    out = [values[0]]
+    for v in values[1:]:
+        out.append(v * k + out[-1] * (1 - k))
+    return out
 
+
+def compute_snapshot(history: list[float]) -> dict:
+    """Indicators from closed closes (oldest first). The one place they are computed:
+    get_technical_snapshot() for live runs and backtest.py for history both call this.
+    An indicator the history is too short for is left out, never guessed."""
     snapshot: dict = {"latest": history[-1]}
     if len(history) >= 5:
         snapshot["sma5"] = sum(history[-5:]) / 5
@@ -243,6 +263,14 @@ def get_technical_snapshot(symbol: str) -> dict | None:
     if len(history) >= 20:
         snapshot["sma20"] = sum(history[-20:]) / 20
         snapshot["change_20d_pct"] = (history[-1] - history[-20]) / history[-20] * 100
+    if len(history) >= 21:
+        # previous bar's averages: entry needs an actual cross, not "SMA5 is above SMA20"
+        snapshot["prev_sma5"] = sum(history[-6:-1]) / 5
+        snapshot["prev_sma20"] = sum(history[-21:-1]) / 20
+    if len(history) >= 35:
+        macd = [a - b for a, b in zip(_ema(history, 12), _ema(history, 26))]
+        signal = _ema(macd, 9)
+        snapshot.update(macd=macd[-1], macd_signal=signal[-1], prev_macd=macd[-2], prev_macd_signal=signal[-2])
 
     rsi = _compute_rsi(history)
     if rsi is not None:
@@ -255,3 +283,9 @@ def get_technical_snapshot(symbol: str) -> dict | None:
         snapshot["bollinger_lower"] = bollinger["lower"]
 
     return snapshot
+
+
+def get_technical_snapshot(symbol: str) -> dict | None:
+    """Indicator snapshot for symbol from its closed daily closes; None when no history."""
+    history = get_price_history(symbol)
+    return compute_snapshot(history) if history else None

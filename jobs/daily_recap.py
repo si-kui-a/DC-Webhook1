@@ -80,18 +80,4 @@ def run_daily_recap():
         )
 
 
-# 模擬持倉(紙上帳戶,使用者確認2026-07-30,見schema.sql同段落註解)：全部是
-# 模擬交易，不動用真實資金。3個帳戶各自獨立頻道(使用者確認2026-07-30)，
-# 不共用webhook——避免3個帳戶的動作/持倉訊息混在同一個頻道裡難以分辨。
-#
-# tw_stock_portfolio(2026-08-06起改版，使用者指示)：原本跟另外兩個帳戶
-# 一樣交給AI(Gemini)即時判斷個股進出場，但自2026-07-30建立以來從未真正
-# 買進過(全部觀望)。改為index_dca_engine.py的規則式指數ETF(0050/006208)
-# 定期定額，完全不呼叫AI，見run_portfolio_channel()裡的tw_stock分流。
-# meta_source_id/angle兩個欄位對AI路徑才有意義，tw_stock已不使用。
-#
-# crypto_futures_portfolio/crypto_discretionary_portfolio(未改版)：讀取
-# 對應大總結頻道「最近幾次」已產出的報告(不限定當天——tw_stock_meta於
-# 台股收盤後13:30左右執行,當天晚上20:30才會有新報告,收盤時點只有前一晚
-# 的報告可用,見db.get_recent_summaries()；PAT-15 enrichment之後改用這個
-# 而非單筆的get_latest_summary())，交給AI決定進出場。
+# 模擬持倉(紙上帳戶，不動用真實資金)的流程見 jobs/portfolio.py 開頭說明。

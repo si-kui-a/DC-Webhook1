@@ -4,6 +4,9 @@
 搜尋GitHub找到的開源專案，記錄下來供之後參考、評估要不要引入邏輯或作法。
 純參考清單，未包含任何程式碼依賴。
 
+> 2026-10-04 起交易決策改為純規則（`rule_engine.py`，策略參數由 `backtest.py` 回測選定），
+> 下方 LLM 交易框架的段落只剩歷史參考價值：LLM 的訓練資料本身包含歷史價格，無法誠實回測。
+
 ## LLM Agent 交易框架(架構上最相關——本專案也是用LLM讀報告做決策)
 
 - [TauricResearch/TradingAgents](https://github.com/tauricresearch/tradingagents)

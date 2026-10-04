@@ -70,7 +70,7 @@ def run_meta_summary_channel(key: str):
     summary = ai_insight.build_meta_summary(config["angle"], reports)
     if not summary:
         logger.error("[%s] Gemini大總結彙整失敗（額度用盡/網路錯誤/回應格式不對），本次略過推播", key)
-        return
+        return False
 
     embeds, omitted_count = digest_format.build_digest_embeds(summary, config["channel_title"], today_str)
     all_ok = True

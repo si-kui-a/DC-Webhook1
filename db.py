@@ -138,6 +138,24 @@ def mark_digest_omitted(item_id: str):
     conn.close()
 
 
+def discard_unsent_items(item_ids: list[str]) -> int:
+    """彙整頻道在AI彙整或推播完全失敗時用：刪掉這次剛寫入、仍是'new'的
+    項目，讓下一次執行重新抓到時還算「新」，可以重試。不刪的話
+    insert_item_if_new()會把它們當成已處理，那天的彙整就永久漏掉
+    (2026-07-31~09-24本機error.log共37次)。只刪status='new'，已推播
+    或已標其他狀態的不受影響。"""
+    if not item_ids:
+        return 0
+    conn = get_conn()
+    placeholders = ",".join("?" * len(item_ids))
+    cur = conn.execute(
+        f"DELETE FROM item WHERE status='new' AND item_id IN ({placeholders})", item_ids
+    )
+    conn.commit()
+    conn.close()
+    return cur.rowcount
+
+
 def update_summary(item_id: str, summary: str):
     """摘要是在 insert_item_if_new() 之後才算出來的（cbc 直接用 RSS
     description，fed/tsmc 需要多發一次 detail 頁請求），先用 summary=None

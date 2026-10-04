@@ -41,39 +41,8 @@ python scripts/show_source_status.py
 ## 已知限制
 
 - **JS 動態渲染頁面**：`requests` 只拿到伺服器回傳的原始 HTML，不會執行 JavaScript。如果某來源的資料是靠前端 JS 抓 API 填進去的，`requests+BeautifulSoup` 會抓空，需改用 Playwright 渲染後再解析。
-- **排程靠 Windows Task Scheduler**：不是 cron/anacron(那是Linux慣例，本專案跑在Windows)，見`scripts/setup_scheduled_tasks.ps1`。主機關機期間錯過的排程不會自動補跑。
+- **排程靠 GitHub Actions**：`scheduler.yml` 循序執行 `scripts/cloud_scheduler.py`，見 `docs/operations/CLOUD_SCHEDULER.md`。本機排程與 `backup.sh` 已於 2026-10-04 移除。
 - **健康監控**：抓取失敗記在本地 log 與 SQLite 的 `fail_count`(見`scrapers/health.py`)，連續失敗達門檻時個別來源會在 log 標記，沒有另外接外部告警管道。
-
-## GitHub 自動備份
-
-**2026-09-25 起 `backup.sh` 不再 commit/push**：pre-commit guard 擋下所有直接 commit 到 main，程式碼異動一律走 feature branch + PR 進 GitHub，夜間自動 commit 從未成功過（見 `docs/DECISIONS.md`）。`backup.sh` 只剩下方「含個資檔案」的加密步驟；以下設定步驟保留作歷史參考。
-
-### 設定步驟（僅需一次）
-
-```bash
-cd intel-pusher
-git init
-git remote add origin git@github.com:你的帳號/你的私有倉庫.git   # 建議用 SSH deploy key，僅授予 push 權限
-```
-
-### 含個資檔案的處理
-
-`encrypt_backup.py` 的 `PII_FILES` 清單目前是空的——intel-pusher 本身不產生個資檔案（沒有 `academic_progress.md`、`my_resume.json` 這類東西，那是另一個專案的殘留設定）。這支腳本保留是為了未來如果這個專案真的產生需要加密備份的個資檔案時，直接把檔名加進 `PII_FILES` 就能用，不需要重寫備份流程。
-
-真正需要保密、不進版控的是 `.env`（Webhook URL）與 `data.db`（去重資料庫），這兩者單純靠 `.gitignore` 排除，不加密、不備份到 GitHub。
-
-若之後這個清單真的不再是空的，金鑰會存在 `~/.intel-pusher-backup.key`（權限 600，只有你能讀），**這把金鑰本身不會被備份**——如果你要保留解密能力，請自行把這把金鑰異地備份一份（例如密碼管理器），遺失金鑰代表無法還原歷史加密備份。
-
-### 執行備份
-
-```bash
-chmod +x backup.sh
-./backup.sh   # 手動測試一次
-```
-
-確認無誤後，依 `scripts/setup_scheduled_tasks.ps1` 建立 Windows 工作排程即可全自動運作
-（本專案實際跑在 Windows Task Scheduler 上，不是 cron——`crontab.example` 是早期
-規劃階段假設的部署方式，跟實際情況不符，已移除）。
 
 ## 租屋搜尋（零 AI）
 租屋來源不自動猜測；以 `RENTAL_FEED_URLS` 明確列出已獲授權的 RSS、JSON 或 HTML 來源。可用 `RENTAL_AREAS`、`RENTAL_MAX_MONTHLY`、`RENTAL_MIN_PING`、`RENTAL_KEYWORDS`、`RENTAL_EXCLUDE` 篩選。

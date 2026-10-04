@@ -49,9 +49,8 @@ def _normalize_cbc(raw: dict) -> dict:
 
 
 def _normalize_semi_supply_chain(raw: dict) -> dict:
-    """台廠(semi_tw_suppliers)/美股客戶(us_customer_feeds)兩個來源的raw
-    形狀本身已一致含source_id/source_name(建置時就統一過)，不需轉換，
-    比照_normalize_substack。"""
+    """台廠(semi_tw_suppliers)的raw形狀本身已含source_id/source_name，
+    不需轉換，比照_normalize_substack。"""
     return raw
 
 
@@ -167,11 +166,8 @@ DIGEST_CHANNELS = {
         "webhook_env": "WEBHOOK_SEMI_SUPPLY_CHAIN",
         "channel_title": "半導體供應鏈",
         "angle": (
-            "台積電上下游台廠供應鏈(封測/設備/材料)公司重大訊息，以及美股"
-            "主要客戶(Apple/NVIDIA/AMD/Broadcom)跟晶片產能/代工/客製晶片/"
-            "台灣生態系投資直接相關的新聞(已用關鍵字過濾掉一般企業新聞，"
-            "見us_customer_util.py)。目標是讓讀者知道供應鏈上下游今天有"
-            "哪些產能、訂單、投資動態，不做投資建議。"
+            "台積電上下游台廠供應鏈(封測/設備/材料)公司重大訊息。目標是讓"
+            "讀者知道供應鏈上下游今天有哪些產能、訂單、投資動態，不做投資建議。"
         ),
         "fetch_fn": semi_supply_chain.fetch,
         "normalize_fn": _normalize_semi_supply_chain,

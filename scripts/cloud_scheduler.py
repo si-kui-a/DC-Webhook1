@@ -68,7 +68,10 @@ TASKS = {
     # in a row locally and from runners (2026-09-24); re-add once the source is fixed.
     "crypto_meta": (["main.py", "--source", "crypto_meta"], 21, None),
     "tw_stock_meta": (["main.py", "--source", "tw_stock_meta"], 21, None),
-    "crypto_nightly_recap": (["main.py", "--source", "crypto_nightly_recap"], 23, None),
+    # Was 23: catch-up only covers the same Taipei day and the last fallback tick is
+    # ~21:43, so a 23:00 task ran once in 8 days (2026-10-04). It is a rule-only
+    # "no change today" notice, so an earlier slot loses nothing.
+    "crypto_nightly_recap": (["main.py", "--source", "crypto_nightly_recap"], 21, None),
     "check_links": (["scripts/check_links.py"], 5, MONDAY),
 }
 # Runs on every tick (was every 20 min locally; hourly keeps the free-tier budget).

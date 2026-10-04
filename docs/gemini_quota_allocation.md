@@ -68,3 +68,10 @@ portfolio`當天剛啟用事件觸發，`check_triggers.py`的「首次執行」
 同時`classify_internships`(實習語意消歧)已於2026-07-31完全移除，改用
 純規則(`internship_util._is_semantic_noise()`)，原本估算的「實習0~1」
 現在是穩定的**0**，重新分配後預估降到約**17/天**。
+
+## 2026-10-04 更新：模擬持倉完全不用 AI
+
+上表三列 `build_trade_decision` 與 AI 安全閥（`assess_stop_loss`）都已移除：tw_stock 從
+2026-08-06 起是規則式定期定額，兩個加密貨幣帳戶從 2026-10-04 起由 `rule_engine.py` 的規則
+決策（含固定停損與強制平倉模擬），`check_triggers.py` 改成每輪直接跑規則。模擬持倉的 AI
+用量為 **0**；彙整頻道、大總結與翻譯不受影響。

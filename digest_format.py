@@ -10,6 +10,7 @@ Discord embed payload,不呼叫任何AI——排版邏輯由程式碼決定,不�
 貪婪塞滿,溢出的續到訊息2,訊息2還裝不下的才真的省略)。points已經是
 ai_insight回傳的優先度排序,這裡不重新排序,只依序塞入直到超過預算。
 """
+import portfolio_metrics
 
 MSG_BUDGET = 5500  # 留緩衝空間給Discord 6000上限,扣掉title/footer開銷
 DESC_MAX = 3000    # overview上限,避免總覽本身就把整個預算吃光,沒空間給重點
@@ -107,19 +108,25 @@ def build_digest_embeds(digest: dict, channel_title: str, date_str: str) -> tupl
 
 
 def build_portfolio_embed(channel_title: str, date_str: str, portfolio: dict,
-                           positions: list[dict], action_lines: list[str]) -> dict:
+                           positions: list[dict], action_lines: list[str],
+                           deposits: float = 0.0, extra_lines: list[str] | None = None) -> dict:
     """模擬持倉頻道的訊息組裝。跟build_digest_embeds()不同——內容量本身有界
     (持倉數/今日動作數都不會失控成百筆)，不需要2則訊息的分頁邏輯，只做
-    單一embed的欄位長度保險截斷。"""
+    單一embed的欄位長度保險截斷。deposits是累計入金：報酬率扣掉它，否則
+    定期定額的入金會被算成獲利(2026-10-04 review)。extra_lines附在總覽之後
+    (XIRR、買進持有對照)。"""
     total_value = portfolio["current_cash"] + sum(p.get("market_value", 0) for p in positions)
     starting = portfolio["starting_capital"]
-    return_pct = (total_value - starting) / starting * 100 if starting else 0.0
+    return_pct = portfolio_metrics.return_excluding_deposits(total_value, starting, deposits) * 100
+    invested = f"起始本金{starting:,.2f}" + (f"＋累計入金{deposits:,.2f}" if deposits else "")
 
     overview = (
         f"總資產:{total_value:,.2f} {portfolio['currency']}"
-        f"(起始本金{starting:,.2f}，累計報酬率{return_pct:+.1f}%)\n"
+        f"({invested}，扣除入金後報酬率{return_pct:+.1f}%)\n"
         f"可用現金:{portfolio['current_cash']:,.2f} {portfolio['currency']}"
     )
+    if extra_lines:
+        overview += "\n" + "\n".join(extra_lines)
 
     fields = []
     if action_lines:

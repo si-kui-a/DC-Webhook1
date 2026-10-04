@@ -1,8 +1,6 @@
 """
 test_ai_insight_fallback.py — 驗證ai_insight.py的GPT備援邊界(2026-08-29新增):
 - 翻譯/情緒判斷、頻道彙整、大總結:Gemini失敗且符合白名單條件時才切GPT。
-- build_trade_decision:即使Gemini失敗,絕不觸發GPT備援(安全邊界,見交接
-  指令排除事項)。
 不打真實網路,urllib.request.urlopen與provider輔助函式一律monkeypatch/mock。
 """
 import os
@@ -102,30 +100,6 @@ class NonTradeFunctionsIntegrationTests(unittest.TestCase):
              patch.dict(os.environ, {"GEMINI_API_KEY": "gk-test"}):
             result = ai_insight.get_translation_and_sentiment("some english text")
         self.assertIsNone(result)
-
-
-class TradeDecisionNeverFailsOverTests(unittest.TestCase):
-    """build_trade_decision刻意不接_call_ai_json_text/_call_openai_json_text,
-    Gemini重試耗盡後直接回None,不論OPENAI_API_KEY是否設定都不會呼叫GPT。"""
-
-    def setUp(self):
-        patcher = patch.object(gemini_client.time, "sleep", lambda *_: None)
-        patcher.start()
-        self.addCleanup(patcher.stop)
-
-    def test_trade_decision_never_calls_openai_on_gemini_failure(self):
-        with patch.object(ai_insight, "_call_openai_json_text") as gpt, \
-             patch.object(ai_insight.urllib.request, "urlopen", side_effect=_http_error(429)), \
-             patch.dict(os.environ, {"GEMINI_API_KEY": "gk-test", "OPENAI_API_KEY": "sk-test"}):
-            result = ai_insight.build_trade_decision(
-                angle="測試帳戶",
-                portfolio={"current_cash": 1000, "currency": "USD", "starting_capital": 1000},
-                positions=[],
-                recent_trades=[],
-                recent_reports=[{"published_at": "2026-08-29", "summary": "測試報告"}],
-            )
-        self.assertIsNone(result)
-        gpt.assert_not_called()
 
 
 if __name__ == "__main__":

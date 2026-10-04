@@ -20,6 +20,9 @@
 TARGET_SYMBOLS = ["0050", "006208"]
 SPLIT_RATIO = {"0050": 0.5, "006208": 0.5}
 MONTHLY_CONTRIBUTION = 100.0
+# 起始本金1000 TWD從建立以來一直閒置(每月只花當月入金)。2026-10-04使用者決定：
+# 分10個月併入，每月從帳上多出來的現金多投入這個金額，用完就回到只投當月入金。
+INITIAL_TRANCHE = 100.0
 
 # (乖離率上限, 加碼倍數)：由上而下比對，符合第一個滿足的門檻即採用。
 # 乖離率 = (現價 - SMA20) / SMA20。
@@ -46,9 +49,12 @@ def decide_monthly_buys(available_cash: float, technical_snapshots: dict[str, di
     金額總和超過available_cash時，等比例縮減全部規劃，確保不透支模擬帳戶
     現金(現金水位由呼叫端在deposit_cash()之後查詢，含本次注入的定額)。
     """
+    # 超過當月入金的現金就是還沒投入的起始本金(或之前暫停加碼留下的)，每月取一份
+    tranche = min(INITIAL_TRANCHE, max(0.0, available_cash - MONTHLY_CONTRIBUTION))
+    budget = MONTHLY_CONTRIBUTION + tranche
     plans = []
     for symbol in TARGET_SYMBOLS:
-        symbol_base = MONTHLY_CONTRIBUTION * SPLIT_RATIO[symbol]
+        symbol_base = budget * SPLIT_RATIO[symbol]
         snapshot = technical_snapshots.get(symbol)
         if not snapshot or "sma20" not in snapshot or not snapshot.get("latest"):
             plans.append({

@@ -41,16 +41,6 @@ def upsert_source(source_id: str, name: str, category: str, base_url: str):
     conn.close()
 
 
-def get_source(source_id: str) -> dict | None:
-    """回傳source表單筆紀錄，或None(尚未註冊過)。目前給
-    check_triggers.py的重試退避機制重用(last_fetched_at當作「上次嘗試
-    時間」，不是嚴格意義的抓取成功時間)，2026-07-31新增。"""
-    conn = get_conn()
-    row = conn.execute("SELECT * FROM source WHERE source_id=?", (source_id,)).fetchone()
-    conn.close()
-    return dict(row) if row else None
-
-
 def _normalize_for_dedup(text: str) -> str:
     """PAT-27：docstring原本就宣稱「避免空白/全半形差異造成重複推播」，
     但實作只有.strip()(掐頭去尾)，沒有真的處理內部連續空白或全半形——
@@ -294,8 +284,12 @@ def open_position(portfolio_id: str, symbol: str, side: str, quantity: float,
     return position_id
 
 
-def close_position(position_id: str, price: float, trade_date: str, reasoning: str) -> float:
-    """平倉：歸還margin_used+pnl給current_cash,回傳這筆realized_pnl。"""
+def close_position(position_id: str, price: float, trade_date: str, reasoning: str,
+                   costs: float = 0.0, liquidated: bool = False) -> float:
+    """平倉：歸還margin_used+pnl給current_cash,回傳這筆realized_pnl。
+    costs(手續費+資金費率,見rule_engine.trade_costs)從pnl扣除；liquidated=True
+    時pnl固定為−margin_used——強制平倉後保證金全數歸零,不會再倒扣現金
+    (2026-10-04前虧損可以超過保證金,現金可以變負數)。"""
     conn = get_conn()
     pos = conn.execute("SELECT * FROM position WHERE position_id=?", (position_id,)).fetchone()
     if pos is None:
@@ -310,10 +304,12 @@ def close_position(position_id: str, price: float, trade_date: str, reasoning: s
         raise ValueError(f"position_id={position_id} 狀態為'{pos['status']}',不是'open',拒絕重複平倉")
 
     margin_used = pos["avg_cost"] * pos["quantity"] / pos["leverage"]
-    if pos["side"] == "short":
-        pnl = (pos["avg_cost"] - price) * pos["quantity"]
+    if liquidated:
+        pnl = -margin_used
+    elif pos["side"] == "short":
+        pnl = (pos["avg_cost"] - price) * pos["quantity"] - costs
     else:
-        pnl = (price - pos["avg_cost"]) * pos["quantity"]
+        pnl = (price - pos["avg_cost"]) * pos["quantity"] - costs
 
     now = datetime.now(timezone.utc).isoformat()
     conn.execute("UPDATE position SET status='closed' WHERE position_id=?", (position_id,))
@@ -344,19 +340,6 @@ def get_recent_trades(portfolio_id: str, limit: int = 10) -> list[dict]:
     return [dict(r) for r in rows]
 
 
-def get_recent_summaries(source_id: str, limit: int = 5) -> list[dict]:
-    """回傳這個來源最近N筆summary(依寫入時間由新到舊),供AI比對「這幾天
-    報告怎麼變化」的趨勢,不只看單一天的截面——同樣是純DB查詢。"""
-    conn = get_conn()
-    rows = conn.execute(
-        "SELECT published_at, summary FROM item WHERE source_id=? "
-        "ORDER BY fetched_at DESC LIMIT ?",
-        (source_id, limit),
-    ).fetchall()
-    conn.close()
-    return [dict(r) for r in rows]
-
-
 def get_published_items(source_id: str, limit: int = 50) -> list[dict]:
     """回傳這個來源狀態為'published'(已判定相關且已推播過)的項目,由新到舊,
     供履歷比對功能查詢目前有效的實習職缺清單用——只要'published'不要
@@ -372,45 +355,38 @@ def get_published_items(source_id: str, limit: int = 50) -> list[dict]:
     return [dict(r) for r in rows]
 
 
-def get_trade_win_stats(portfolio_id: str) -> dict | None:
-    """回傳這個帳戶歷史已平倉交易的勝率統計(供Kelly公式部位建議用)。
-    trade_log.pnl是2026-07-31新增欄位(ALTER TABLE，使用者已APPROVED並
-    執行)，樣本數不足(含0筆)時回傳None，呼叫端自然退化成「歷史樣本不足」
-    的既有分支。"""
+def get_deposits(portfolio_id: str) -> list[dict]:
+    """這個帳戶每筆入金(trade_date, amount)，由舊到新；報酬率扣除入金與XIRR用。"""
     conn = get_conn()
     rows = conn.execute(
-        "SELECT pnl FROM trade_log WHERE portfolio_id=? AND action='close' AND pnl IS NOT NULL",
-        (portfolio_id,),
+        "SELECT trade_date, price AS amount FROM trade_log WHERE portfolio_id=? AND action='deposit' "
+        "ORDER BY created_at", (portfolio_id,),
     ).fetchall()
     conn.close()
-
-    pnls = [r["pnl"] for r in rows]
-    if not pnls:
-        return None
-
-    wins = [p for p in pnls if p > 0]
-    losses = [-p for p in pnls if p < 0]
-    win_rate = len(wins) / len(pnls)
-    avg_win = sum(wins) / len(wins) if wins else 0.0
-    avg_loss = sum(losses) / len(losses) if losses else 0.0
-    return {
-        "sample_size": len(pnls),
-        "win_rate": win_rate,
-        "avg_win": avg_win,
-        "avg_loss": avg_loss,
-    }
+    return [dict(r) for r in rows]
 
 
-def record_hold(portfolio_id: str, trade_date: str, reasoning: str):
-    now = datetime.now(timezone.utc).isoformat()
+def get_symbols_traded_since(portfolio_id: str, since_iso: str) -> set[str]:
+    """since_iso(UTC ISO)之後有開倉或平倉的標的。"""
     conn = get_conn()
-    conn.execute(
-        """INSERT INTO trade_log (portfolio_id, trade_date, action, reasoning, created_at)
-           VALUES (?, ?, 'hold_update', ?, ?)""",
-        (portfolio_id, trade_date, reasoning, now),
-    )
-    conn.commit()
+    rows = conn.execute(
+        "SELECT DISTINCT symbol FROM trade_log WHERE portfolio_id=? AND created_at >= ? "
+        "AND (action LIKE 'open_%' OR action='close')", (portfolio_id, since_iso),
+    ).fetchall()
     conn.close()
+    return {r["symbol"] for r in rows}
+
+
+def get_trades_on(portfolio_id: str, trade_date: str) -> list[dict]:
+    """這一天的開倉／平倉紀錄(不含入金與舊版的hold_update)，每日摘要用。"""
+    conn = get_conn()
+    rows = conn.execute(
+        "SELECT action, symbol, quantity, price, pnl, reasoning FROM trade_log "
+        "WHERE portfolio_id=? AND trade_date=? AND (action LIKE 'open_%' OR action='close') ORDER BY created_at",
+        (portfolio_id, trade_date),
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
 
 
 def deposit_cash(portfolio_id: str, amount: float, trade_date: str, reasoning: str):
@@ -427,57 +403,6 @@ def deposit_cash(portfolio_id: str, amount: float, trade_date: str, reasoning: s
         """INSERT INTO trade_log (portfolio_id, trade_date, action, price, reasoning, created_at)
            VALUES (?, ?, 'deposit', ?, ?, ?)""",
         (portfolio_id, trade_date, amount, reasoning, now),
-    )
-    conn.commit()
-    conn.close()
-
-
-def get_items_since(source_ids: list[str], since_iso: str) -> list[dict]:
-    """回傳指定來源在since_iso之後新抓到的項目(title/summary/fetched_at)，
-    供check_triggers.py的「消息面」關鍵字比對用(2026-07-31新增)。"""
-    if not source_ids:
-        return []
-    conn = get_conn()
-    placeholders = ",".join("?" * len(source_ids))
-    rows = conn.execute(
-        f"SELECT title, summary, fetched_at FROM item "
-        f"WHERE source_id IN ({placeholders}) AND fetched_at > ? "
-        f"ORDER BY fetched_at DESC",
-        (*source_ids, since_iso),
-    ).fetchall()
-    conn.close()
-    return [dict(r) for r in rows]
-
-
-def get_portfolio_trigger(portfolio_id: str) -> dict | None:
-    """回傳這個投組目前設定的事件觸發條件，或None(尚未設定過,呼叫端應視為
-    首次執行,直接觸發一次AI決策)。"""
-    conn = get_conn()
-    row = conn.execute(
-        "SELECT * FROM portfolio_trigger WHERE portfolio_id=?", (portfolio_id,)
-    ).fetchone()
-    conn.close()
-    return dict(row) if row else None
-
-
-def set_portfolio_trigger(portfolio_id: str, price_triggers: str, news_keywords: str,
-                           min_hours_between_calls: float, set_by_trade_log_id: int | None):
-    """AI每次做完交易決策後呼叫,寫入/更新下次應該被喚醒的條件(2026-07-31新增,
-    使用者APPROVED的event-triggered機制核心)。"""
-    now = datetime.now(timezone.utc).isoformat()
-    conn = get_conn()
-    conn.execute(
-        """INSERT INTO portfolio_trigger
-               (portfolio_id, price_triggers, news_keywords, min_hours_between_calls, set_at, set_by_trade_log_id)
-           VALUES (?, ?, ?, ?, ?, ?)
-           ON CONFLICT(portfolio_id) DO UPDATE SET
-               price_triggers=excluded.price_triggers,
-               news_keywords=excluded.news_keywords,
-               min_hours_between_calls=excluded.min_hours_between_calls,
-               set_at=excluded.set_at,
-               set_by_trade_log_id=excluded.set_by_trade_log_id""",
-        (portfolio_id, price_triggers, news_keywords, min_hours_between_calls,
-         now, set_by_trade_log_id),
     )
     conn.commit()
     conn.close()

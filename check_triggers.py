@@ -3,7 +3,7 @@ check_triggers.py — 加密貨幣模擬持倉「事件觸發」規則式檢查(
 
 取代main.py --source crypto_futures_portfolio/crypto_discretionary_portfolio
 每小時無條件呼叫AI的排程方式:這支改成高頻排程(建議15-30分鐘一次,見
-scripts/setup_scheduled_tasks.ps1的IntelPusher-CheckTriggers任務)，純規則
+.github/workflows/scheduler.yml)，純規則
 檢查以下維度，任一觸發才呼叫main.py的run_portfolio_channel()——AI只在真的
 有意義的變化時才被呼叫，省下大部分免費層每日20次配額(這兩個帳戶原本各自
 每小時=24次/天，加起來48次/天，單獨就超過整包配額兩倍多，這是2026-07-31

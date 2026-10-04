@@ -13,8 +13,8 @@ scraper-integration-plan「3. 定期自動commit+push」）：範圍窄(純字�
 只在檔案真的有異動時才commit(git diff --quiet判斷)，沒有異動就直接
 結束，不留空commit。
 
-建議排程(Windows Scheduled Task，比照scripts/setup_scheduled_tasks.ps1
-既有慣例，每月一次)：
+建議排程(Windows Scheduled Task，每月一次；本機其他排程已於2026-10-04
+移除，改由scheduler.yml執行)：
     $Python = 'C:\Projects\10-501_Intel_Pusher_股票情報推播機器人\venv\Scripts\pythonw.exe'
     $Script = 'C:\Projects\10-501_Intel_Pusher_股票情報推播機器人\scripts\auto_commit_internship_keywords.py'
     $action = New-ScheduledTaskAction -Execute $Python -Argument "`"$Script`""

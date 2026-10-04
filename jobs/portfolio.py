@@ -42,7 +42,7 @@ PORTFOLIO_CHANNELS = {
     "crypto_discretionary_portfolio": {
         "portfolio_id": "crypto_discretionary",
         "webhook_env": "WEBHOOK_PORTFOLIO_CRYPTO_DISCRETIONARY",
-        "channel_title": "模擬持倉－幣圈自主判斷",
+        "channel_title": "模擬持倉－幣圈現貨無槓桿",
         "meta_source_id": "digest_report.crypto_digest",
         "angle": "幣圈現貨帳戶,只能做多(side必須是long),leverage固定為1,不可放空、不可用槓桿。",
     },
@@ -72,7 +72,7 @@ def _price_with_pnl(position: dict) -> dict | None:
 def _run_tw_stock_dca(key: str, config: dict):
     """tw_stock_portfolio的規則式定期定額(2026-08-06新增，使用者指示，
     見index_dca_engine.py開頭說明)。排程仍是工作日每天跑一次(見
-    scripts/setup_scheduled_tasks.ps1)，但本月已經注入過定額(trade_log
+    .github/workflows/scheduler.yml)，但本月已經注入過定額(trade_log
     有本月的action='deposit'紀錄)就直接跳過、不重複扣款/不推播——避免
     一個月20幾個工作日各推播一次「本月已完成」造成通知疲勞。"""
     portfolio_id = config["portfolio_id"]

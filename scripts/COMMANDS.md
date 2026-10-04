@@ -5,15 +5,10 @@
 
 | 腳本 | 用途 |
 |---|---|
-| `add_check_links_task.ps1` | 新增「近期連結健康檢查」排程任務(2026-09-10建立)。 |
-| `add_sig_content_watch_task.ps1` | 新增「留德網站內容維護監測」排程任務(2026-08-05建立，同日改為每季一次)官方連結/學校網址變動頻率低，季排程夠用。 |
-| `add_thu_calendar_task.ps1` | 新增「東海大學當期學期行事曆合併」排程任務(2026-09-10建立)。 |
-| `apply_event_triggered_crypto.ps1` | 需要以系統管理員身分執行的 PowerShell 執行(本session沒有管理員權限,無法直接修改Scheduled Tasks,見全域CLAUDE.md已知限制)。 |
 | `auto_commit_internship_keywords.py` | scripts/auto_commit_internship_keywords.py — 每月排程，只commit+pushconfig/internship_keywords.json一個檔案，直接進main分支，不走feature… |
 | `check_encoding.py` | Fail if any tracked-area .py file is not valid UTF-8 (run by CI quality.yml). |
 | `check_links.py` | Check recently fetched item links without rewriting original URLs. |
 | `cloud_scheduler.py` | Hourly dispatcher for the GitHub Actions scheduler (replaces Windows Task Scheduler). |
-| `consolidate_daily_tasks.ps1` | 需要以系統管理員身分執行的 PowerShell 執行。 |
 | `dev_knowledge_audit.py` | 「資深懶散工程師複查」的機械化版本。 |
 | `discord_admin.py` | scripts/discord_admin.py — Discord 伺服器頻道/webhook 管理小工具。 |
 | `install_hooks.py` | 安裝 pre-commit + pre-push hook。 |
@@ -22,35 +17,10 @@
 | `probe_cloud_reachability.py` | Probe which scrapers still work from a given network location. |
 | `publish_mechanical_change.py` | scripts/publish_mechanical_change.py — 把「機械性/低風險清單增減」類變更(CLAUDE.md 2026-08-07訂定、範圍限定ip與study-companion的PR自動merge例外)從「… |
 | `run_profile_checks.py` | Run profile-specific offline checks without AI or network access. |
-| `setup_scheduled_tasks.ps1` | 需要以系統管理員身分執行的 PowerShell 執行。 |
 | `show_source_status.py` | 印出目前repo實際有哪些來源/頻道(2026-09-10新增)。 |
 | `verify_project_contract.py` | Offline contract check for repositories adopting the universal workflow. |
 
 ## 呼叫方式
-
-### `add_check_links_task.ps1`
-
-```
-以系統管理員身分開 PowerShell，執行本腳本。
-```
-
-### `add_sig_content_watch_task.ps1`
-
-```
-以系統管理員身分開 PowerShell，執行本腳本。
-```
-
-### `add_thu_calendar_task.ps1`
-
-```
-以系統管理員身分開 PowerShell，執行本腳本。
-```
-
-### `apply_event_triggered_crypto.ps1`
-
-```
-powershell -File apply_event_triggered_crypto.ps1   (不需參數)
-```
 
 ### `auto_commit_internship_keywords.py`
 
@@ -74,12 +44,6 @@ python check_links.py [--limit] [--days]   (由參數定義推導)
 
 ```
 python cloud_scheduler.py [--only] [--dry-run] [--now] [--mark-done-today]   (由參數定義推導)
-```
-
-### `consolidate_daily_tasks.ps1`
-
-```
-powershell -File consolidate_daily_tasks.ps1   (不需參數)
 ```
 
 ### `dev_knowledge_audit.py`
@@ -138,12 +102,6 @@ python scripts/publish_mechanical_change.py \
 
 ```
 python run_profile_checks.py [--root] [--profile] [--ai-required] [--json]   (由參數定義推導)
-```
-
-### `setup_scheduled_tasks.ps1`
-
-```
-powershell -File setup_scheduled_tasks.ps1 -Name <Name> -Source <Source> -Trigger <Trigger>   (由參數定義推導)
 ```
 
 ### `show_source_status.py`

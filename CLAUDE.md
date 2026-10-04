@@ -5,8 +5,8 @@
 
 ## Stack
 純Python(stdlib優先) + SQLite + Discord/Telegram Webhook + GitHub Actions排程
-排程: 雲端見docs/operations/CLOUD_SCHEDULER.md(2026-09-24起)；本機
-scripts/setup_scheduled_tasks.ps1只剩ResumeBot與還原用(見PAT-14)
+排程: 雲端見docs/operations/CLOUD_SCHEDULER.md(2026-09-24起)；本機排程腳本
+已於2026-10-04移除(要還原從git歷史取回)
 
 ## 開發知識庫
 Meta_Dev_Knowledge.md 記錄所有已踩過的坑/設計決策，改動前先查是否已有相關PAT條目。

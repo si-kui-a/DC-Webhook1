@@ -1,3 +1,7 @@
+"""Fail if any tracked-area .py file is not valid UTF-8 (run by CI quality.yml).
+
+Usage: python scripts/check_encoding.py
+"""
 from pathlib import Path
 import sys
 

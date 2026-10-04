@@ -25,6 +25,8 @@ try {
   $sha = (git -C $repo rev-parse HEAD 2>$null).Trim()
   $python = Join-Path $repo 'venv\Scripts\python.exe'
   if (-not (Test-Path $python)) { $python = 'python' }
+  # Without this the child writes .out/.err in cp950, which reads back as mojibake.
+  $env:PYTHONUTF8 = '1'
   "run_id=$runId task=$Task commit=$sha start=$start" | Set-Content -LiteralPath $log -Encoding utf8
   $p = Start-Process -FilePath $python -ArgumentList (@($Script) + $Arguments) -WorkingDirectory $repo -NoNewWindow -PassThru -RedirectStandardOutput $stdout -RedirectStandardError $stderr
   # Touch Handle right away: without a cached handle, ExitCode reads back empty

@@ -144,10 +144,21 @@ jobs:
           path: state.enc
           key: ip-state-${{ github.run_id }}-${{ github.run_attempt }}
 
+      # Due when the newest backup artifact is >20 h old (or missing). A fixed UTC hour
+      # never matched: the fallback cron fires at 01/07/13/19 UTC, so only a tick that
+      # happened to be delayed into 03 UTC backed up (1 artifact in 7 days, 2026-10-04).
       - name: Decide daily backup
         id: backup
         if: always()
-        run: echo "due=$([ "$(date +%H)" = "03" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          last=$(gh api "repos/${{ github.repository }}/actions/artifacts?per_page=100" \
+            --jq '[.artifacts[] | select((.name | startswith("state-backup-")) and (.expired | not)) | .created_at] | max // empty' 2>/dev/null || true)
+          due=true
+          if [ -n "$last" ] && [ $(( $(date +%s) - $(date -d "$last" +%s) )) -lt 72000 ]; then due=false; fi
+          echo "last backup: ${last:-none} -> due=$due"
+          echo "due=$due" >> "$GITHUB_OUTPUT"
 
       # Artifacts of a public repo can be downloaded by any signed-in GitHub user: encrypted only.
       - name: Daily state backup

@@ -15,6 +15,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 
 import ai_insight  # noqa: E402
+import gemini_client  # noqa: E402
 
 
 def _http_error(code):
@@ -39,7 +40,7 @@ class IsFailoverEligibleTests(unittest.TestCase):
 
 class CallAiJsonTextFallbackTests(unittest.TestCase):
     def setUp(self):
-        patcher = patch.object(ai_insight.time, "sleep", lambda *_: None)
+        patcher = patch.object(gemini_client.time, "sleep", lambda *_: None)
         patcher.start()
         self.addCleanup(patcher.stop)
 
@@ -108,7 +109,7 @@ class TradeDecisionNeverFailsOverTests(unittest.TestCase):
     Gemini重試耗盡後直接回None,不論OPENAI_API_KEY是否設定都不會呼叫GPT。"""
 
     def setUp(self):
-        patcher = patch.object(ai_insight.time, "sleep", lambda *_: None)
+        patcher = patch.object(gemini_client.time, "sleep", lambda *_: None)
         patcher.start()
         self.addCleanup(patcher.stop)
 

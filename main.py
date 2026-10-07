@@ -12,6 +12,7 @@ main.py — 主執行入口。
     python main.py --source tw_semi_digest
     python main.py --source daily_recap
     python main.py --source thu_calendar
+    python main.py --source thu_lixue
     python main.py --source all
 
 tsmc/cbc已從即時逐篇推播改為晚間彙整(見DIGEST_CHANNELS)，substack_easypoint
@@ -41,6 +42,7 @@ from jobs.daily_recap import run_daily_recap
 from jobs.portfolio import PORTFOLIO_CHANNELS, run_portfolio_channel
 from jobs.crypto_recap import run_crypto_nightly_recap
 from jobs.thu_calendar import run_thu_calendar
+from jobs.thu_lixue import run_thu_lixue
 _LOG_FORMAT = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
 
 _activity_handler = logging.FileHandler(os.path.join(WORK_DIR, "activity.log"), encoding="utf-8")
@@ -61,7 +63,7 @@ logger = logging.getLogger("main")
 load_dotenv()
 def main():
     parser = argparse.ArgumentParser(description="本地爬蟲 → Discord Webhook 推播")
-    parser.add_argument("--source", choices=list(SOURCE_REGISTRY.keys()) + ["all", "daily_recap", "crypto_nightly_recap", "thu_calendar"]
+    parser.add_argument("--source", choices=list(SOURCE_REGISTRY.keys()) + ["all", "daily_recap", "crypto_nightly_recap", "thu_calendar", "thu_lixue"]
                                      + list(DIGEST_CHANNELS.keys())
                                      + list(PORTFOLIO_CHANNELS.keys()),
                         help="執行單一來源（與 --scholarship 二選一）")
@@ -96,6 +98,9 @@ def main():
         run_crypto_nightly_recap()
     elif args.source == "thu_calendar":
         run_thu_calendar()
+    elif args.source == "thu_lixue":
+        # explicit False (fetch or send failed) -> exit 1 so the cloud scheduler retries
+        return 1 if run_thu_lixue() is False else 0
     elif args.source == "all":
         for key in SOURCE_REGISTRY:
             run_source(key)

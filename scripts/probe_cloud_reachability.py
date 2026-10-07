@@ -32,6 +32,7 @@ TARGETS = [
     ("scrapers.scholarship_efg", "fetch"),
     ("scrapers.scholarship_daad", "fetch"),
     ("scrapers.thu_calendar", "fetch_raw_events"),
+    ("scrapers.thu_lixue", "fetch_announcements"),
     ("scrapers.semi_tw_suppliers", "fetch_all"),
     ("scrapers.semi_supply_chain", "fetch"),
     ("scrapers.tsmc", "fetch"),

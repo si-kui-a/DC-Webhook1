@@ -44,6 +44,7 @@ TASK_TIMEOUT_SEC = 900  # same ceiling as ops/run_task.ps1
 # TwStockPortfolio 14:40 -> 15 since the dispatcher ticks once an hour.
 TASKS = {
     "thu_calendar": (["main.py", "--source", "thu_calendar"], 6, None),
+    "thu_lixue": (["main.py", "--source", "thu_lixue"], 6, None),
     "daily_recap": (["main.py", "--source", "daily_recap"], 7, None),
     "internship": (["main.py", "--internship"], 9, None),
     "twse_chunghwa": (["main.py", "--source", "twse_chunghwa"], 9, None),

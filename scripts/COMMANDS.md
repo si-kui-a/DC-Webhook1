@@ -5,7 +5,7 @@
 
 | 腳本 | 用途 |
 |---|---|
-| `auto_commit_internship_keywords.py` | scripts/auto_commit_internship_keywords.py — 每月排程，只commit+pushconfig/internship_keywords.json一個檔案，直接進main分支，不走feature… |
+| `auto_commit_internship_keywords.py` | scripts/auto_commit_internship_keywords.py — 每月排程，只commit+push config/internship_keywords.json一個檔案，直接進main分支，不走featur… |
 | `check_encoding.py` | Fail if any tracked-area .py file is not valid UTF-8 (run by CI quality.yml). |
 | `check_links.py` | Check recently fetched item links without rewriting original URLs. |
 | `cloud_scheduler.py` | Hourly dispatcher for the GitHub Actions scheduler (replaces Windows Task Scheduler). |

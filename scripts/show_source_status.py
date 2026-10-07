@@ -37,6 +37,7 @@ STANDALONE_SOURCES = {
     "daily_recap": "每日晨間快報(彙整昨日3個彙整頻道)",
     "crypto_nightly_recap": "幣圈模擬持倉夜間回顧",
     "thu_calendar": "東海大學當期學期行事曆合併+Telegram提醒",
+    "thu_lixue": "東海大學勵學基金申請時程Telegram提醒(前60/30/7/1天＋新公告)",
 }
 
 

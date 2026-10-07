@@ -4,5 +4,10 @@
       "label": "離線測試",
       "command": "python C:/Projects/_scripts/run_tests.py ."
     }
-  ]
+  ],
+  "checklist": {
+    "inputs": ["progress/manual_checks_extra.csv"],
+    "resolved": "progress/manual_checks_resolved.csv",
+    "title": "人工核對清單"
+  }
 }

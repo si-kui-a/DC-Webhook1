@@ -77,6 +77,40 @@ EVERY_TICK = {
 }
 
 
+# The hourly Apps Script trigger was documented as a one-time manual step and never deployed:
+# from 2026-09-26 to 10-07 every tick came from the sparse, hours-late fallback cron and nothing
+# said so. Hour-level reminders (jobs/thu_events.py) silently degrade on such gaps, so a gap
+# longer than this is reported once a day until the trigger works.
+TICK_GAP_ALERT = timedelta(hours=2)
+SETUP_DOC = "docs/operations/CLOUD_SCHEDULER.md（一次性設定 2、切換步驟 7：installTrigger）"
+
+
+def tick_gap_alert(now: datetime, state: dict) -> str | None:
+    """Record this tick in state["_tick"]; return an alert text when the previous tick is too old
+    (at most one per day). The first tick ever has nothing to compare with."""
+    tick = state.setdefault("_tick", {})
+    last = tick.get("last")
+    tick["last"] = now.isoformat()
+    if not last:
+        return None
+    gap = now - datetime.fromisoformat(last)
+    if gap <= TICK_GAP_ALERT or tick.get("alerted") == now.date().isoformat():
+        return None
+    tick["alerted"] = now.date().isoformat()
+    hours = gap.total_seconds() / 3600
+    return (f"⚠️ 雲端排程 {hours:.1f} 小時沒有執行（上次 {last[:16]}）。每小時觸發可能沒在運作，"
+            f"以小時計的活動提醒會漏送。檢查 Apps Script 觸發器：{SETUP_DOC}")
+
+
+def send_alert(text: str) -> None:
+    """Through the EDU bot: the reminders that depend on hourly ticks go there too."""
+    sys.path.insert(0, str(ROOT))
+    import notify_telegram
+    notify_telegram.send_message(text, parse_mode="HTML",
+                                 bot_token=notify_telegram.TELEGRAM_EDU_BOT_TOKEN,
+                                 chat_id=notify_telegram.TELEGRAM_EDU_CHAT_ID)
+
+
 def load_state() -> dict:
     try:
         return json.loads(STATE_PATH.read_text(encoding="utf-8"))
@@ -145,10 +179,18 @@ def main() -> int:
     parser.add_argument("--mark-done-today", action="store_true",
                         help="cutover helper: record today's already-due tasks as done without running "
                              "them, so the first cloud tick doesn't resend what the local tasks sent")
+    parser.add_argument("--force", action="store_true",
+                        help="with --only: also rerun tasks that already succeeded today")
     args = parser.parse_args()
 
     now = datetime.fromisoformat(args.now).replace(tzinfo=TAIWAN_TZ) if args.now else datetime.now(TAIWAN_TZ)
     state = load_state()
+    if not args.dry_run:
+        alert = tick_gap_alert(now, state)
+        save_state(state)
+        if alert:
+            print("tick gap alert sent", flush=True)
+            send_alert(alert)
     if args.mark_done_today:
         today = now.date().isoformat()
         marked = due_tasks(now, state)
@@ -162,6 +204,13 @@ def main() -> int:
     if unknown:
         print(f"unknown task(s): {unknown}", file=sys.stderr)
         return 2
+    if args.only is not None and not args.force:
+        # 2026-10-07: a manual run of thu_lixue resent the reminder the 15:42 catch-up had sent
+        today = now.date().isoformat()
+        done = [n for n in names if state.get(n, {}).get("last_success") == today]
+        if done:
+            print(f"skipped, already succeeded today (use force to rerun): {done}", flush=True)
+            names = [n for n in names if n not in done]
 
     print(f"tick {now.isoformat()} due={names}", flush=True)
     if not args.dry_run:

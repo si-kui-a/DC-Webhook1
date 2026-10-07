@@ -69,8 +69,12 @@ TASKS = {
     "crypto_nightly_recap": (["main.py", "--source", "crypto_nightly_recap"], 21, None),
     "check_links": (["scripts/check_links.py"], 5, MONDAY),
 }
-# Runs on every tick (was every 20 min locally; hourly keeps the free-tier budget).
-EVERY_TICK = ("check_triggers", ["check_triggers.py"])
+# Run on every tick (was every 20 min locally; hourly keeps the free-tier budget).
+# thu_events: reminders hours before a registered campus activity need an hourly look.
+EVERY_TICK = {
+    "check_triggers": ["check_triggers.py"],
+    "thu_events": ["main.py", "--source", "thu_events"],
+}
 
 
 def load_state() -> dict:
@@ -154,7 +158,7 @@ def main() -> int:
         print(f"marked done for {today}: {marked}")
         return 0
     names = args.only if args.only is not None else due_tasks(now, state)
-    unknown = [n for n in names if n not in TASKS and n != EVERY_TICK[0]]
+    unknown = [n for n in names if n not in TASKS and n not in EVERY_TICK]
     if unknown:
         print(f"unknown task(s): {unknown}", file=sys.stderr)
         return 2
@@ -163,13 +167,13 @@ def main() -> int:
     if not args.dry_run:
         prune_logs(now)
     failed = []
-    if args.only is None or EVERY_TICK[0] in names:
-        if not run(*EVERY_TICK, dry_run=args.dry_run):
-            failed.append(EVERY_TICK[0])
+    for name, argv in EVERY_TICK.items():
+        if (args.only is None or name in names) and not run(name, argv, dry_run=args.dry_run):
+            failed.append(name)
 
     today = now.date().isoformat()
     for name in names:
-        if name == EVERY_TICK[0]:
+        if name in EVERY_TICK:
             continue
         ok = run(name, TASKS[name][0], args.dry_run)
         if args.dry_run:

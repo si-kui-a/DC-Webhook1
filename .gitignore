@@ -13,6 +13,9 @@ logs/*.lock
 logs/runs/
 work/*.log
 work/source_health.json
+# 已報名活動(個人行程，repo是公開的)：本機清單與已送提醒紀錄；雲端讀Secret THU_EVENTS
+private/
+work/thu_event_reminders.json
 
 # 每天由jobs/thu_calendar.py重新產生，沒有其他程式讀它；進版控只會讓main每天變髒
 data/thu_academic_calendar.json

@@ -122,6 +122,9 @@ jobs:
           ONLY: ${{ inputs.only }}
           DRY_RUN: ${{ inputs.dry_run }}
           MARK_DONE: ${{ inputs.mark_done_today }}
+          # registered campus activities (jobs/thu_events.py); a personal schedule, so it is a
+          # secret set by scripts/add_thu_event.py, never a file in this public repo
+          THU_EVENTS: ${{ secrets.THU_EVENTS }}
         run: |
           args=()
           if [ -n "$ONLY" ]; then read -ra names <<< "$ONLY"; args+=(--only "${names[@]}"); fi

@@ -19,7 +19,7 @@ FAIL = ["-c", "import sys; sys.exit(1)"]
 def sched(tmp_path, monkeypatch):
     monkeypatch.setattr(cs, "STATE_PATH", tmp_path / "state.json")
     monkeypatch.setattr(cs, "LOG_DIR", tmp_path / "logs")  # task output would land in the real work/logs
-    monkeypatch.setattr(cs, "EVERY_TICK", ("check_triggers", OK))
+    monkeypatch.setattr(cs, "EVERY_TICK", {"check_triggers": OK, "thu_events": OK})
     monkeypatch.setattr(cs, "TASKS", {
         "morning": (OK, 9, None),
         "broken": (FAIL, 9, None),

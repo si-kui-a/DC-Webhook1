@@ -5,6 +5,7 @@
 
 | 腳本 | 用途 |
 |---|---|
+| `add_thu_event.py` | Add a Tunghai campus-activity registration email to the reminder list (jobs/thu_events.py). |
 | `auto_commit_internship_keywords.py` | scripts/auto_commit_internship_keywords.py — 每月排程，只commit+push config/internship_keywords.json一個檔案，直接進main分支，不走featur… |
 | `check_encoding.py` | Fail if any tracked-area .py file is not valid UTF-8 (run by CI quality.yml). |
 | `check_links.py` | Check recently fetched item links without rewriting original URLs. |
@@ -21,6 +22,14 @@
 | `verify_project_contract.py` | Offline contract check for repositories adopting the universal workflow. |
 
 ## 呼叫方式
+
+### `add_thu_event.py`
+
+```
+python scripts/add_thu_event.py EMAIL.txt [EMAIL.txt ...] [--no-sync]
+python scripts/add_thu_event.py --list
+python scripts/add_thu_event.py --remove ID [--no-sync]
+```
 
 ### `auto_commit_internship_keywords.py`
 

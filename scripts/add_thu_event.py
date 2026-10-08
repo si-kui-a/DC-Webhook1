@@ -7,6 +7,7 @@ scheduler reads. Activities that ended more than 7 days ago are dropped on every
 
 Usage:
   python scripts/add_thu_event.py EMAIL.txt [EMAIL.txt ...] [--no-sync]
+  python scripts/add_thu_event.py - [--no-sync]        (email text on stdin; nothing saved but the activity)
   python scripts/add_thu_event.py --list
   python scripts/add_thu_event.py --remove ID [--no-sync]
 """
@@ -66,8 +67,11 @@ def main(argv: list[str] | None = None) -> int:
         ap.error("give EMAIL files, --list or --remove")
     by_id = {e["id"]: e for e in events}
     for path in args.emails:
+        # "-": read the email from stdin, so the raw text (with the registrant's name and phone)
+        # is never saved to a file (2026-10-07 the pasted emails went to temporary files first)
+        text = sys.stdin.read() if str(path) == "-" else path.read_text(encoding="utf-8")
         try:
-            event = parse_registration(path.read_text(encoding="utf-8"))
+            event = parse_registration(text)
         except ValueError as err:
             print(f"FAIL {path.name}: {err}")
             return 1

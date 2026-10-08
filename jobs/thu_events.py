@@ -92,6 +92,17 @@ def _remaining(delta: timedelta) -> str:
     return f"還有 {hours} 小時" + (f" {mins} 分" if mins else "")
 
 
+def points(event: dict) -> list[tuple[str, datetime]]:
+    """[(label, 送出時間)]：活動自帶 reminders([{"label", "at"}]，例如以到場時間為準的看診)就用它，
+    否則用預設的開始前 REMINDERS。送出時間一律對齊 5 分鐘。due、render、reminder_health 共用這裡。"""
+    from jobs import precise_send as ps
+    if event.get("reminders"):
+        return [(r["label"], ps.round_down(datetime.fromisoformat(r["at"]).replace(tzinfo=TAIWAN_TZ)))
+                for r in event["reminders"]]
+    start = _start(event)
+    return [(label, ps.round_down(start - offset)) for label, offset in REMINDERS]
+
+
 def format_event(event: dict, now: datetime) -> str:
     start = _start(event)
     end = datetime.fromisoformat(event["end"]).replace(tzinfo=TAIWAN_TZ)
@@ -101,15 +112,18 @@ def format_event(event: dict, now: datetime) -> str:
     checkin = event.get("checkin", "")
     if event.get("checkin_note") and event["checkin_note"] not in checkin:
         checkin = f"{checkin}（請於 {event['checkin_note']} 準時報到）".strip()
-    lines = [f"⏰ <b>活動提醒｜{_remaining(start - now)}</b>",
+    when = f"{start:%H:%M}" + (f"–{end:%H:%M}" if end != start else "")
+    lines = [f"⏰ <b>{html.escape(event.get('kind', '活動'))}提醒｜{_remaining(start - now)}</b>",
              f"<b>{html.escape(event['name'])}</b>",
-             f"🗓 {day} {start:%H:%M}–{end:%H:%M}",
+             f"🗓 {day} {when}",
              f"📍 {html.escape(event.get('place', ''))}"]
     if checkin:
         lines.append(f"📝 報到 {html.escape(checkin)}")
+    if event.get("bring"):
+        lines.append(f"🎒 攜帶：{html.escape('、'.join(event['bring']))}")
     if event.get("benefits"):
         lines.append(f"🎁 {html.escape('；'.join(event['benefits']))}")
-    lines.append(f"✅ {event.get('status', '已報名')}" + (f"｜{event['url']}" if event.get("url") else ""))
+    lines.append(f"✅ {html.escape(event.get('status', '已報名'))}" + (f"｜{event['url']}" if event.get("url") else ""))
     return "\n".join(lines)
 
 
@@ -126,12 +140,12 @@ def due(events: list[dict], sent: dict, state: dict, now: datetime) -> tuple[lis
         if now >= start:
             continue
         done = set(sent.get(event["id"], []))
-        points = [(label, ps.round_down(start - offset)) for label, offset in REMINDERS]
-        past = [label for label, at in points if at <= now and label not in done]
+        event_points = points(event)
+        past = [label for label, at in event_points if at <= now and label not in done]
         if past:
             to_send.append(event)
             done |= set(past)
-        for label, at in points:
+        for label, at in event_points:
             if at <= now or label in done:
                 continue
             key = ps.opaque_key(event["id"], label)
@@ -151,7 +165,7 @@ def render(key: str, now: datetime) -> str | None:
     """send_at 送出時才產生訊息：活動已刪除或已開始就不送。"""
     from jobs import precise_send as ps
     for event in load_events():
-        if now < _start(event) and any(ps.opaque_key(event["id"], label) == key for label, _ in REMINDERS):
+        if now < _start(event) and any(ps.opaque_key(event["id"], label) == key for label, _ in points(event)):
             return format_event(event, now)
     return None
 

@@ -10,6 +10,7 @@ Usage:
   python scripts/add_thu_event.py - [--no-sync]        (email text on stdin; nothing saved but the activity)
   python scripts/add_thu_event.py --list
   python scripts/add_thu_event.py --sync                (re-upload the list; reminder_health.py says when)
+  python scripts/add_thu_event.py --json - [--no-sync]  (an appointment as JSON on stdin, own reminder times)
   python scripts/add_thu_event.py --remove ID [--no-sync]
 """
 from __future__ import annotations
@@ -42,6 +43,24 @@ def save(events: list[dict], now: datetime) -> list[dict]:
     return keep
 
 
+def check_event(event: dict) -> list[str]:
+    """A hand-written appointment: {"id", "name", "start": "YYYY-MM-DDTHH:MM", optional "end", "place",
+    "checkin", "bring": [...], "kind" (訊息標題，預設「活動」), "status", "url",
+    "reminders": [{"label", "at"}] (own reminder times; default: the activity offsets)}.
+    No personal identifiers (name, phone, ID numbers) belong here."""
+    problems = [f"missing {k}" for k in ("id", "name", "start") if not event.get(k)]
+    if problems:
+        return problems
+    event.setdefault("end", event["start"])
+    try:
+        start = datetime.fromisoformat(event["start"])
+        problems += [f"reminder {r.get('label')} is not before the start" for r in event.get("reminders", [])
+                     if datetime.fromisoformat(r["at"]) >= start]
+    except (ValueError, KeyError, TypeError) as e:
+        problems.append(f"bad time: {e}")
+    return problems
+
+
 def sync() -> bool:
     """Secret value goes through stdin, never onto the command line or the screen."""
     r = subprocess.run(["gh", "secret", "set", "THU_EVENTS", "--repo", REPO],
@@ -58,6 +77,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--remove", metavar="ID")
     ap.add_argument("--no-sync", action="store_true")
     ap.add_argument("--sync", action="store_true", help="only upload the current list to the secret")
+    ap.add_argument("--json", metavar="FILE", help="add an appointment written as JSON ('-' = stdin), e.g. "
+                    "a dentist visit with its own reminder times; see check_event()")
     args = ap.parse_args(argv)
     now = datetime.now(TAIWAN_TZ)
     if args.sync:
@@ -67,9 +88,18 @@ def main(argv: list[str] | None = None) -> int:
         for e in events:
             print(f"{e['id']}  {e['start']}  {e['name']}  @ {e['place']}")
         return 0
-    if not args.emails and not args.remove:
-        ap.error("give EMAIL files, --list or --remove")
+    if not args.emails and not args.remove and not args.json:
+        ap.error("give EMAIL files, --json, --list or --remove")
     by_id = {e["id"]: e for e in events}
+    if args.json:
+        raw = sys.stdin.read() if args.json == "-" else Path(args.json).read_text(encoding="utf-8")
+        event = json.loads(raw)
+        problems = check_event(event)
+        if problems:
+            print("FAIL json: " + "；".join(problems))
+            return 1
+        print(f"{'updated' if event['id'] in by_id else 'added  '} {event['id']}  {event['start']}  {event['name']}")
+        by_id[event["id"]] = event
     for path in args.emails:
         # "-": read the email from stdin, so the raw text (with the registrant's name and phone)
         # is never saved to a file (2026-10-07 the pasted emails went to temporary files first)

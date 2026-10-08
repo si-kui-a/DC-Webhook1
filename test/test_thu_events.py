@@ -127,6 +127,33 @@ class Due(unittest.TestCase):
             self.assertIsNone(te.render(key, at("2026-10-08T09:30")))  # removed from the list
 
 
+class Appointment(unittest.TestCase):
+    """A hand-added appointment with its own reminder times (arrival-based), not a campus activity."""
+    APPT = {"id": "dentist-x", "name": "測試診所看診", "kind": "看診", "start": "2026-10-21T16:00",
+            "place": "某路 1 號", "checkin": "15:45 前到場", "bring": ["健保卡", "掛號費 200 元"],
+            "status": "已預約", "url": "https://example.com/",
+            "reminders": [{"label": "3d", "at": "2026-10-18T16:00"}, {"label": "arrive-2h", "at": "2026-10-21T13:45"}]}
+
+    def test_own_points_message_and_validation(self):
+        import importlib
+        import sys
+        from pathlib import Path
+        sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))  # not cwd-relative
+        add = importlib.import_module("add_thu_event")
+        appt = dict(self.APPT)
+        self.assertEqual(add.check_event(appt), [])
+        self.assertEqual(appt["end"], appt["start"])  # filled in
+        self.assertEqual([(l, a.strftime("%m-%d %H:%M")) for l, a in te.points(appt)],
+                         [("3d", "10-18 16:00"), ("arrive-2h", "10-21 13:45")])
+        msg = te.format_event(appt, at("2026-10-21T13:45")).splitlines()
+        self.assertEqual(msg[0], "⏰ <b>看診提醒｜還有 2 小時 15 分</b>")
+        self.assertIn("🗓 2026-10-21（三） 16:00", msg)
+        self.assertIn("🎒 攜帶：健保卡、掛號費 200 元", msg)
+        self.assertEqual(msg[-1], "✅ 已預約｜https://example.com/")
+        late = dict(self.APPT, reminders=[{"label": "x", "at": "2026-10-21T16:30"}])
+        self.assertTrue(add.check_event(late))
+
+
 class PreciseSend(unittest.TestCase):
     def setUp(self):
         self.events = [te.parse_registration(EMAIL)]

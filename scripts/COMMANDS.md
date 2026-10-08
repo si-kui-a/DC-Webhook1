@@ -31,6 +31,7 @@ python scripts/add_thu_event.py EMAIL.txt [EMAIL.txt ...] [--no-sync]
 python scripts/add_thu_event.py - [--no-sync]        (email text on stdin; nothing saved but the activity)
 python scripts/add_thu_event.py --list
 python scripts/add_thu_event.py --sync                (re-upload the list; reminder_health.py says when)
+python scripts/add_thu_event.py --json - [--no-sync]  (an appointment as JSON on stdin, own reminder times)
 python scripts/add_thu_event.py --remove ID [--no-sync]
 ```
 

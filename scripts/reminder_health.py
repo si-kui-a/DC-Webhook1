@@ -100,9 +100,7 @@ def check_token(today: date) -> tuple[list[str], list[str]]:
 def upcoming(now: datetime, days: int) -> list[str]:
     lines = []
     for event in te.load_events() if te.EVENTS_PATH.exists() else []:
-        start = datetime.fromisoformat(event["start"]).replace(tzinfo=ps.TAIWAN_TZ)
-        for label, offset in te.REMINDERS:
-            at = ps.round_down(start - offset)
+        for label, at in te.points(event):
             if now < at <= now + timedelta(days=days):
                 lines.append(f"     {at:%m-%d %H:%M}  {label:>2}  {event['name'][:40]}")
     return ["info upcoming activity reminders:"] + sorted(lines) if lines else ["info upcoming: none in range"]

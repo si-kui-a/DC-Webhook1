@@ -9,6 +9,7 @@ Usage:
   python scripts/add_thu_event.py EMAIL.txt [EMAIL.txt ...] [--no-sync]
   python scripts/add_thu_event.py - [--no-sync]        (email text on stdin; nothing saved but the activity)
   python scripts/add_thu_event.py --list
+  python scripts/add_thu_event.py --sync                (re-upload the list; reminder_health.py says when)
   python scripts/add_thu_event.py --remove ID [--no-sync]
 """
 from __future__ import annotations
@@ -56,8 +57,11 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--list", action="store_true")
     ap.add_argument("--remove", metavar="ID")
     ap.add_argument("--no-sync", action="store_true")
+    ap.add_argument("--sync", action="store_true", help="only upload the current list to the secret")
     args = ap.parse_args(argv)
     now = datetime.now(TAIWAN_TZ)
+    if args.sync:
+        return 0 if EVENTS_PATH.exists() and sync() else 1
     events = load()
     if args.list:
         for e in events:

@@ -7,9 +7,9 @@
 
 每小時由雲端排程跑一次(scripts/cloud_scheduler.py 的 EVERY_TICK)，用 EDU bot 推播。
 提醒點：活動開始前一週、前一天、前三小時、前二小時、前一小時(使用者2026-10-07指定)。
-排程每小時一次、分鐘數不固定，所以「到了提醒點之後的第一次執行」才送，訊息裡寫實際
-剩餘時間；已送的提醒記在 work/thu_event_reminders.json(隨加密狀態保存)，不重送。
-同一活動同時有好幾個提醒點已到(排程延遲)時只送最近的一個，舊的直接記為已送。
+提醒點對齊 5 分鐘，由 jobs/precise_send.py 預約整點送出(排程本身每小時一次、分鐘數不
+固定)；已處理的提醒點記在 work/thu_event_reminders.json(隨加密狀態保存)，不重送。
+提醒點已過還沒處理(排程延遲、預約失敗)時立即送，同一活動只送最近的一個。
 """
 from __future__ import annotations
 
@@ -113,23 +113,51 @@ def format_event(event: dict, now: datetime) -> str:
     return "\n".join(lines)
 
 
-def due(events: list[dict], sent: dict, now: datetime) -> tuple[list[dict], dict]:
-    """(這次要送的活動, 更新後的已送紀錄)。只看還沒開始的活動；已開始的活動從紀錄裡移除。"""
-    to_send, new_sent = [], {}
+def due(events: list[dict], sent: dict, state: dict, now: datetime) -> tuple[list[dict], dict, list]:
+    """(現在就送的活動, 更新後的已處理紀錄, 送出成功後要記錄的 (key, at))。
+
+    還沒到的提醒點：在 LOOKAHEAD 內就預約 send_at 整點送出(precise_send.request)。
+    已經過了的(排程延遲、預約失敗)：只送最近的一個，其餘直接記為已處理。
+    已開始的活動不再處理，也從紀錄裡移除。"""
+    from jobs import precise_send as ps
+    to_send, new_sent, sent_marks = [], {}, []
     for event in events:
         start = _start(event)
         if now >= start:
             continue
         done = set(sent.get(event["id"], []))
-        reached = [label for label, offset in REMINDERS if start - offset <= now]
-        if reached and reached[-1] not in done:
+        points = [(label, ps.round_down(start - offset)) for label, offset in REMINDERS]
+        past = [label for label, at in points if at <= now and label not in done]
+        if past:
             to_send.append(event)
-        new_sent[event["id"]] = sorted(done | set(reached))
-    return to_send, new_sent
+            done |= set(past)
+        for label, at in points:
+            if at <= now or label in done:
+                continue
+            key = ps.opaque_key(event["id"], label)
+            result = ps.request(state, "thu_events", key, at, now)
+            if result in ("scheduled", "done"):
+                done.add(label)
+            elif result == "send_now":
+                if event not in to_send:
+                    to_send.append(event)
+                done.add(label)
+                sent_marks.append((key, at))
+        new_sent[event["id"]] = sorted(done)
+    return to_send, new_sent, sent_marks
+
+
+def render(key: str, now: datetime) -> str | None:
+    """send_at 送出時才產生訊息：活動已刪除或已開始就不送。"""
+    from jobs import precise_send as ps
+    for event in load_events():
+        if now < _start(event) and any(ps.opaque_key(event["id"], label) == key for label, _ in REMINDERS):
+            return format_event(event, now)
+    return None
 
 
 def run_thu_events(now: datetime | None = None) -> bool:
-    import notify_telegram
+    from jobs import precise_send as ps
 
     now = now or datetime.now(TAIWAN_TZ)
     try:
@@ -138,16 +166,18 @@ def run_thu_events(now: datetime | None = None) -> bool:
         logger.error("[thu_events] 活動資料讀取失敗: %s", e)
         return False
     sent = json.loads(STATE_PATH.read_text(encoding="utf-8")) if STATE_PATH.exists() else {}
-    to_send, new_sent = due(events, sent, now)
+    state = ps.load_state()
+    to_send, new_sent, sent_marks = due(events, sent, state, now)
     if to_send:
         message = "\n\n".join(format_event(e, now) for e in sorted(to_send, key=_start))
-        ok = notify_telegram.send_message(message, parse_mode="HTML",
-                                          bot_token=notify_telegram.TELEGRAM_EDU_BOT_TOKEN,
-                                          chat_id=notify_telegram.TELEGRAM_EDU_CHAT_ID)
-        if not ok:
+        if not ps.send(message):
             logger.error("[thu_events] Telegram推播失敗，下次執行重送")
-            return False  # 不記為已送
+            ps.save_state(state, now)  # keep the bookings already dispatched; nothing marked as sent
+            return False
+        for key, at in sent_marks:
+            ps.mark_sent(state, "thu_events", key, at)
         logger.info("[thu_events] 推播 %d 個活動提醒", len(to_send))
+    ps.save_state(state, now)
     STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
     STATE_PATH.write_text(json.dumps(new_sent, ensure_ascii=False, indent=1), encoding="utf-8")
     return True

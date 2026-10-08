@@ -14,6 +14,8 @@ main.py — 主執行入口。
     python main.py --source thu_calendar
     python main.py --source thu_lixue
     python main.py --source thu_events
+    python main.py --source precise_verify
+    python main.py --send-at JOB KEY AT
     python main.py --source all
 
 tsmc/cbc已從即時逐篇推播改為晚間彙整(見DIGEST_CHANNELS)，substack_easypoint
@@ -65,7 +67,7 @@ logger = logging.getLogger("main")
 load_dotenv()
 def main():
     parser = argparse.ArgumentParser(description="本地爬蟲 → Discord Webhook 推播")
-    parser.add_argument("--source", choices=list(SOURCE_REGISTRY.keys()) + ["all", "daily_recap", "crypto_nightly_recap", "thu_calendar", "thu_lixue", "thu_events"]
+    parser.add_argument("--source", choices=list(SOURCE_REGISTRY.keys()) + ["all", "daily_recap", "crypto_nightly_recap", "thu_calendar", "thu_lixue", "thu_events", "precise_verify"]
                                      + list(DIGEST_CHANNELS.keys())
                                      + list(PORTFOLIO_CHANNELS.keys()),
                         help="執行單一來源（與 --scholarship 二選一）")
@@ -73,7 +75,13 @@ def main():
                         help="批次執行所有獎學金來源")
     parser.add_argument("--internship", action="store_true",
                         help="批次執行所有台灣實習來源")
+    parser.add_argument("--send-at", nargs=3, metavar=("JOB", "KEY", "AT"),
+                        help="(.github/workflows/send_at.yml) 睡到 AT 再送出 JOB 的提醒")
     args = parser.parse_args()
+
+    if args.send_at:
+        from jobs.precise_send import run_send_at
+        return 0 if run_send_at(*args.send_at) else 1
 
     flags = (args.source, args.scholarship, args.internship)
     if not any(flags):
@@ -99,7 +107,10 @@ def main():
     elif args.source == "crypto_nightly_recap":
         run_crypto_nightly_recap()
     elif args.source == "thu_calendar":
-        run_thu_calendar()
+        return 1 if run_thu_calendar() is False else 0
+    elif args.source == "precise_verify":
+        from jobs.precise_send import run_verify
+        return 1 if run_verify() is False else 0
     elif args.source == "thu_lixue":
         # explicit False (fetch or send failed) -> exit 1 so the cloud scheduler retries
         return 1 if run_thu_lixue() is False else 0

@@ -9,20 +9,21 @@
    於某個提醒點才出來(例如截止前三週才公告)時，前面的提醒點已經錯過，這則
    訊息就是補上的那一次；抽不到日期的公告也會在這裡出現，不會靜默漏掉。
 
-不存狀態檔：雲端排程每次都是乾淨環境，兩種訊息都只由「今天」決定。
+訊息內容只由「今天」決定。送出時間：每天 SEND_AT(06:00)整點，由 jobs/precise_send.py
+預約；排程從 05:00 起就跑，先確認今天有沒有要提醒的。
 """
 from __future__ import annotations
 
 import html
 import logging
-from datetime import date, timedelta
+from datetime import date, datetime, time, timedelta
 
-import notify_telegram
 from scrapers import thu_lixue
 
 logger = logging.getLogger("main")
 
 REMIND_DAYS_BEFORE = (60, 30, 7, 1)
+SEND_AT = time(6, 0)  # 整點送出(precise_send)；排程從 05:00 起先預約
 _WHEN = {60: "前兩個月", 30: "前一個月", 7: "前一週", 1: "明天"}
 _KIND = {"start": "開始", "end": "截止", "deadline": "截止", "date": ""}
 
@@ -72,25 +73,37 @@ def build_message(announcements: list[dict], today: date) -> str | None:
     return "\n".join(lines)
 
 
-def run_thu_lixue(today: date | None = None) -> bool:
-    today = today or date.today()
+def render(key: str, now: datetime) -> str | None:
+    """send_at 送出時重抓公告再產生訊息(key 是日期)。"""
+    today = date.fromisoformat(key)
+    return build_message(thu_lixue.fetch_announcements(today), today)
+
+
+def run_thu_lixue(now: datetime | None = None) -> bool:
+    """05:00 起的排程先確認今天有沒有要提醒的，有就預約 SEND_AT 整點送出(precise_send)；
+    排程晚到超過 SEND_AT 就立即送。預約失敗且還早時回 False，讓排程下一次再試。"""
+    from jobs import precise_send as ps
+
+    now = now or datetime.now(ps.TAIWAN_TZ)
+    today = now.date()
     try:
         announcements = thu_lixue.fetch_announcements(today)
     except Exception as e:
-        # http_client已重試；抓不到當天就不推，隔天照常(提醒點錯過一個，其他三個還在)
-        logger.error("[thu_lixue] 抓取失敗，今天不推播: %s", e)
+        # http_client已重試；回 False 讓排程當天再試(每天最多 3 次)
+        logger.error("[thu_lixue] 抓取失敗: %s", e)
         return False
     message = build_message(announcements, today)
     if message is None:
         logger.info("[thu_lixue] 今天沒有要提醒的事項（%d 則公告）", len(announcements))
         return True
-    ok = notify_telegram.send_message(
-        message, parse_mode="HTML",
-        bot_token=notify_telegram.TELEGRAM_EDU_BOT_TOKEN,
-        chat_id=notify_telegram.TELEGRAM_EDU_CHAT_ID,
-    )
-    if ok:
-        logger.info("[thu_lixue] Telegram提醒推播成功")
-    else:
-        logger.error("[thu_lixue] Telegram提醒推播失敗")
-    return ok
+    state = ps.load_state()
+    at = datetime.combine(today, SEND_AT, ps.TAIWAN_TZ)
+    result = ps.request(state, "thu_lixue", today.isoformat(), at, now)
+    if result == "send_now":
+        if not ps.send(message):
+            logger.error("[thu_lixue] Telegram提醒推播失敗")
+            return False
+        ps.mark_sent(state, "thu_lixue", today.isoformat(), at)
+    ps.save_state(state, now)
+    logger.info("[thu_lixue] %s", result)
+    return result != "later"

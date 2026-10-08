@@ -43,8 +43,9 @@ TASK_TIMEOUT_SEC = 900  # same ceiling as ops/run_task.ps1
 # Hours mirror the local Windows tasks; 20:30 tasks run at 21 (after the 20:00 digests),
 # TwStockPortfolio 14:40 -> 15 since the dispatcher ticks once an hour.
 TASKS = {
-    "thu_calendar": (["main.py", "--source", "thu_calendar"], 6, None),
-    "thu_lixue": (["main.py", "--source", "thu_lixue"], 6, None),
+    # 05: the message is ready before its 06:00 send time (jobs/precise_send.py books it)
+    "thu_calendar": (["main.py", "--source", "thu_calendar"], 5, None),
+    "thu_lixue": (["main.py", "--source", "thu_lixue"], 5, None),
     "daily_recap": (["main.py", "--source", "daily_recap"], 7, None),
     "internship": (["main.py", "--internship"], 9, None),
     "twse_chunghwa": (["main.py", "--source", "twse_chunghwa"], 9, None),
@@ -74,6 +75,8 @@ TASKS = {
 EVERY_TICK = {
     "check_triggers": ["check_triggers.py"],
     "thu_events": ["main.py", "--source", "thu_events"],
+    # confirms the booked on-time sends ran; resends what failed (jobs/precise_send.py)
+    "precise_verify": ["main.py", "--source", "precise_verify"],
 }
 
 
@@ -81,7 +84,9 @@ EVERY_TICK = {
 # from 2026-09-26 to 10-07 every tick came from the sparse, hours-late fallback cron and nothing
 # said so. Hour-level reminders (jobs/thu_events.py) silently degrade on such gaps, so a gap
 # longer than this is reported once a day until the trigger works.
-TICK_GAP_ALERT = timedelta(hours=2)
+# 3 h, not 2: Apps Script's hourly trigger is not on the hour, two ticks can be almost 2 h apart
+# without any being missed. Over 3 h means at least two ticks were lost.
+TICK_GAP_ALERT = timedelta(hours=3)
 SETUP_DOC = "docs/operations/CLOUD_SCHEDULER.md（一次性設定 2、切換步驟 7：installTrigger）"
 
 

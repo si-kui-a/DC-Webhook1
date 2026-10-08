@@ -1,0 +1,66 @@
+name: send-at
+
+# One on-time reminder: started by jobs/precise_send.py (from the hourly scheduler tick) up to
+# 75 min ahead, it sleeps until `at` (aligned to 5 minutes) and sends through the EDU bot.
+# The message is rebuilt at send time from the job's own data, so the inputs carry no content:
+# this repo is public and anyone can read the run list. The next scheduler tick checks this run
+# by its title and resends if it failed (precise_send.run_verify).
+run-name: send ${{ inputs.job }} ${{ inputs.key }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      job:
+        description: 'thu_events, thu_lixue or thu_calendar'
+        type: choice
+        options: [thu_events, thu_lixue, thu_calendar]
+      key:
+        description: 'opaque key the job resolves (event hash or date)'
+        required: true
+      at:
+        description: 'send time, ISO 8601 with offset'
+        required: true
+
+permissions:
+  contents: read
+
+env:
+  TZ: Asia/Taipei
+  PYTHONUTF8: '1'
+
+jobs:
+  send:
+    runs-on: ubuntu-latest
+    timeout-minutes: 100  # LOOKAHEAD (75 min) + setup
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'  # same as scheduler.yml (TWCA certs)
+          cache: pip
+
+      - run: pip install -r requirements.txt
+
+      - name: Write .env from secret
+        env:
+          DOTENV: ${{ secrets.DOTENV }}
+        run: |
+          if [ -z "$DOTENV" ]; then echo "::error::secret DOTENV is not set"; exit 1; fi
+          printf '%s\n' "$DOTENV" > .env
+
+      - name: Mask every .env value
+        run: |
+          while IFS= read -r line || [ -n "$line" ]; do
+            case "$line" in ''|\#*|*=) continue ;; esac
+            value="${line#*=}"; value="${value%\"}"; value="${value#\"}"
+            echo "::add-mask::$value"
+          done < .env
+
+      - name: Sleep until the send time, then send
+        env:  # inputs via env, never interpolated into the script text
+          JOB: ${{ inputs.job }}
+          KEY: ${{ inputs.key }}
+          AT: ${{ inputs.at }}
+          THU_EVENTS: ${{ secrets.THU_EVENTS }}
+        run: python main.py --send-at "$JOB" "$KEY" "$AT" > /dev/null 2>&1

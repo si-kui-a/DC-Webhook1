@@ -12,20 +12,22 @@ bot token/chat_id發自己的訊息(季排程，內容異常時才發)——同�
    data/thu_academic_calendar.json(本機檔，2026-09-25起不進版控，
    見docs/DECISIONS.md)。
 2. 依scrapers/thu_calendar.py的get_reminder_trigger_dates()判斷「今天」
-   是否有事項該提醒，有才發一則Telegram訊息(沒有就完全不推播，避免
+   是否有事項該提醒，有才在 SEND_AT(06:00)整點發一則Telegram訊息(jobs/precise_send.py
+   預約；沒有就完全不推播，避免
    通知疲勞，比照sig_watch.py的既有慣例)。訊息內容除了今天要提醒的
    事項，還會附上「下一次推播」的日期跟事項(使用者2026-09-10確認)。
 """
+import html
 import json
 import logging
-from datetime import date
+from datetime import date, datetime, time
 
-import notify_telegram
 from jobs.paths import THU_CALENDAR_PATH
 from scrapers import thu_calendar as thu_calendar_scraper
 from scrapers.thu_calendar import get_current_semester_calendar
 
 logger = logging.getLogger("main")
+SEND_AT = time(6, 0)  # 整點送出(precise_send)；排程從 05:00 起先預約
 
 
 def _events_due_today(events: list[dict], today: date) -> list[tuple[date, dict]]:
@@ -59,30 +61,48 @@ def _format_due_line(today: date, event_date: date, event: dict) -> str:
     return f"• {date_str}　{event['title']}（{when}）"
 
 
-def _send_reminder(calendar: dict, today: date):
+def build_message(calendar: dict, today: date) -> str | None:
+    """今天要提醒的事項(HTML，precise_send 一律用 HTML 送)；沒有就 None。"""
     due = _events_due_today(calendar["events"], today)
     if not due:
-        return
+        return None
 
-    lines = [f"📅 *{calendar['semester']} 行事曆提醒*", ""]
+    lines = [f"📅 <b>{html.escape(calendar['semester'])} 行事曆提醒</b>", ""]
     for event_date, event in sorted(due, key=lambda pair: pair[0]):
-        lines.append(_format_due_line(today, event_date, event))
+        lines.append(html.escape(_format_due_line(today, event_date, event)))
 
     next_date, next_events = _next_push(calendar["events"], today)
     if next_date:
         lines.append("")
         titles = "、".join(e["title"] for e in next_events)
-        lines.append(f"🔜 下一次推播：{next_date.isoformat()}　{titles}")
+        lines.append(html.escape(f"🔜 下一次推播：{next_date.isoformat()}　{titles}"))
+    return "\n".join(lines)
 
-    ok = notify_telegram.send_message(
-        "\n".join(lines),
-        bot_token=notify_telegram.TELEGRAM_EDU_BOT_TOKEN,
-        chat_id=notify_telegram.TELEGRAM_EDU_CHAT_ID,
-    )
-    if ok:
-        logger.info("[thu_calendar] Telegram提醒推播成功，本次 %d 筆事項", len(due))
-    else:
-        logger.error("[thu_calendar] Telegram提醒推播失敗")
+
+def render(key: str, now: datetime) -> str | None:
+    """send_at 送出時重抓行事曆再產生訊息(key 是日期)。"""
+    return build_message(get_current_semester_calendar(), date.fromisoformat(key))
+
+
+def _send_reminder(calendar: dict, now: datetime) -> bool:
+    """有事項就預約 SEND_AT 整點送出(precise_send)；排程晚於 SEND_AT 就立即送。"""
+    from jobs import precise_send as ps
+
+    today = now.date()
+    message = build_message(calendar, today)
+    if message is None:
+        return True
+    state = ps.load_state()
+    at = datetime.combine(today, SEND_AT, ps.TAIWAN_TZ)
+    result = ps.request(state, "thu_calendar", today.isoformat(), at, now)
+    if result == "send_now":
+        if not ps.send(message):
+            logger.error("[thu_calendar] Telegram提醒推播失敗")
+            return False
+        ps.mark_sent(state, "thu_calendar", today.isoformat(), at)
+    ps.save_state(state, now)
+    logger.info("[thu_calendar] 提醒 %s", result)
+    return result != "later"
 
 
 def run_thu_calendar():
@@ -95,8 +115,8 @@ def run_thu_calendar():
         # Google Calendar這個大型服務當天真的整段掛掉，機率低到不值得
         # 為此多維護一套「用舊資料照樣推提醒」的分支與測試；後果最多是
         # 當天沒收到提醒，隔天資料若沒變照常補上，不是資料損毀。
-        logger.error("[thu_calendar] 抓取/解析失敗，今天不推播提醒: %s", e)
-        return
+        logger.error("[thu_calendar] 抓取/解析失敗: %s", e)
+        return False  # 排程當天再試(每天最多 3 次)
 
     with open(THU_CALENDAR_PATH, "w", encoding="utf-8") as f:
         json.dump(calendar, f, ensure_ascii=False, indent=2)
@@ -107,4 +127,5 @@ def run_thu_calendar():
         THU_CALENDAR_PATH, calendar["semester"], len(calendar["events"]),
     )
 
-    _send_reminder(calendar, date.today())
+    from jobs.precise_send import TAIWAN_TZ
+    return _send_reminder(calendar, datetime.now(TAIWAN_TZ))

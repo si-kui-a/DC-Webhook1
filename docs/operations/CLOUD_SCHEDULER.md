@@ -10,7 +10,7 @@
 | 元件 | 角色 |
 |---|---|
 | Google Apps Script `ops/gas_hourly_trigger.gs` | 每小時呼叫 workflow_dispatch（主要觸發） |
-| `scheduler.yml` 的 `schedule` | 每天 4 次備援觸發（GitHub cron 本身會延遲數小時） |
+| `scheduler.yml` 的 `schedule` | 備援觸發；頻率與理由只寫在該檔的 cron 與註解（GitHub cron 本身會延遲數小時） |
 | `scripts/cloud_scheduler.py` | 依台灣時間決定該跑哪些排程；當天補跑；每天最多重試 3 次 |
 | Actions cache `ip-state-*` | 只存**加密後**的 `state.enc`（`data.db` + `work/`），只留最新 3 份 |
 | Artifact `state-backup-*` | 每天 03 點備份一份加密的 `state.enc`，保留 7 天 |

@@ -682,6 +682,6 @@ log卻一直顯示成功)。.NET要在程序結束前持有handle，事後才讀
 ### [PAT-36] 「修復」靠一個沒人做的手動步驟，靜默失效 11 天（2026-10-07）
 **背景**：PAT-33 的修復（Apps Script 每小時觸發）要使用者用自己的 Google 帳號部署，只寫在操作手冊裡。2026-09-26 至 10-07 的 40 次執行有 36 次來自每天 4 次的備援 schedule，`workflow_dispatch` 只有手動的 4 次，沒有任何東西發出警告。新增小時級的活動提醒（`jobs/thu_events.py`）時才發現。同日另一個問題：手動指定 `thu_lixue` 重跑時，15:42 的補跑已經推過，同一則提醒送了兩次。
 
-**修復**：備援 schedule 改每小時（公開 repo 不限分鐘）；`cloud_scheduler.tick_gap_alert` 在兩次執行間隔超過 3 小時時（初版 2 小時，10-08 部署 Apps Script 後放寬，見程式註解），每天推一次警告到 EDU bot；部署步驟列入 `progress/manual_checks_extra.csv`；`--only` 預設跳過今天已成功的任務，要重跑加 `force`。
+**修復**：備援 schedule 先改每小時，10-08 部署 Apps Script 後改每 3 小時（避免重複觸發）；`cloud_scheduler.tick_gap_alert` 在兩次執行間隔超過 3 小時時（初版 2 小時，10-08 部署 Apps Script 後放寬，見程式註解），每天推一次警告到 EDU bot；部署步驟列入 `progress/manual_checks_extra.csv`；`--only` 預設跳過今天已成功的任務，要重跑加 `force`。
 
 **教訓**：依賴人工步驟的修復，同時要有「步驟沒做時會叫」的程式檢查，不能只寫進文件；手動觸發前先看當天的執行紀錄。

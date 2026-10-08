@@ -14,7 +14,7 @@ name: scheduler
 # is the safety net; the dispatcher's catch-up makes late/double ticks harmless.
 # Hourly since 2026-10-07 (was 4 a day): the external trigger had never been deployed,
 # so for 11 days these were the only ticks, and the repo is public (minutes are free).
-# A gap over 2 h now pushes an alert (cloud_scheduler.tick_gap_alert).
+# A gap over 3 h now pushes an alert (cloud_scheduler.tick_gap_alert).
 on:
   schedule:
     - cron: '43 * * * *'  # odd minute avoids top-of-hour congestion

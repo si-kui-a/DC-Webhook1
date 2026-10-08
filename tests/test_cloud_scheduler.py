@@ -41,6 +41,8 @@ def test_tick_gap_alerts_once_a_day():
     state = {}
     assert cs.tick_gap_alert(at("2026-10-07T07:14"), state) is None  # first tick: nothing to compare
     assert cs.tick_gap_alert(at("2026-10-07T08:43"), state) is None  # 1.5 h: fine
+    assert cs.tick_gap_alert(at("2026-10-07T10:40"), state) is None  # ~2 h: Apps Script jitter, not a miss
+    state["_tick"]["last"] = "2026-10-07T08:43:00+08:00"
     assert "7.0 小時" in cs.tick_gap_alert(at("2026-10-07T15:42"), state)
     assert cs.tick_gap_alert(at("2026-10-07T23:50"), state) is None  # already alerted today
     assert cs.tick_gap_alert(at("2026-10-08T03:00"), state) is not None  # new day

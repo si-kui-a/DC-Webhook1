@@ -68,24 +68,29 @@ class Due(unittest.TestCase):
         to_send, new_sent = te.due(self.events, sent, at(now))
         return [e["id"] for e in to_send], new_sent
 
-    def test_each_reminder_point_once(self):
+    def fired_at(self, minute):
         sent, fired = {}, []
         start = at("2026-10-08T12:30")
         now = start - timedelta(days=8)
-        while now < start + timedelta(hours=2):  # hourly ticks at :43
-            ids, sent = self.tick((now.replace(minute=43)).isoformat()[:16], sent)
+        while now < start + timedelta(hours=2):  # hourly ticks at a fixed minute
+            ids, sent = self.tick((now.replace(minute=minute)).isoformat()[:16], sent)
             if ids:
-                fired.append(now.replace(minute=43))
+                fired.append(now.replace(minute=minute).strftime("%m-%d %H:%M"))
             now += timedelta(hours=1)
-        self.assertEqual([f.strftime("%m-%d %H:%M") for f in fired],
-                         ["10-01 12:43", "10-07 12:43", "10-08 09:43", "10-08 10:43", "10-08 11:43"])
+        return fired
+
+    def test_each_point_once_within_half_an_hour(self):
+        # ticks at :13 for a 12:30 start: the old "first tick after the point" sent the
+        # 1-hour reminder at 12:13, 17 minutes before the start
+        self.assertEqual(self.fired_at(13), ["10-01 12:13", "10-07 12:13", "10-08 09:13", "10-08 10:13", "10-08 11:13"])
+        self.assertEqual(self.fired_at(43), ["10-01 12:43", "10-07 12:43", "10-08 09:43", "10-08 10:43", "10-08 11:43"])
 
     def test_late_start_sends_only_latest_point(self):
-        ids, sent = self.tick("2026-10-08T11:00", {})  # 7d, 1d, 3h, 2h all passed, nothing sent yet
+        ids, sent = self.tick("2026-10-08T10:50", {})  # 7d, 1d, 3h, 2h windows reached, nothing sent yet
         self.assertEqual(ids, ["2026000001"])
         self.assertEqual(sent["2026000001"], ["1d", "2h", "3h", "7d"])
-        self.assertEqual(self.tick("2026-10-08T11:20", sent)[0], [])
-        self.assertEqual(self.tick("2026-10-08T11:40", sent)[0], ["2026000001"])  # 1h
+        self.assertEqual(self.tick("2026-10-08T10:55", sent)[0], [])
+        self.assertEqual(self.tick("2026-10-08T11:05", sent)[0], ["2026000001"])  # 1h window opens at 11:00
 
     def test_started_activity_is_dropped(self):
         ids, sent = self.tick("2026-10-08T12:31", {"2026000001": ["1h"]})

@@ -7,8 +7,8 @@
 
 每小時由雲端排程跑一次(scripts/cloud_scheduler.py 的 EVERY_TICK)，用 EDU bot 推播。
 提醒點：活動開始前一週、前一天、前三小時、前二小時、前一小時(使用者2026-10-07指定)。
-排程每小時一次、分鐘數不固定，所以「到了提醒點之後的第一次執行」才送，訊息裡寫實際
-剩餘時間；已送的提醒記在 work/thu_event_reminders.json(隨加密狀態保存)，不重送。
+排程每小時一次、分鐘數不固定，所以提醒點前後 30 分鐘內的那次執行就送(EARLY)，訊息裡
+寫實際剩餘時間；已送的提醒記在 work/thu_event_reminders.json(隨加密狀態保存)，不重送。
 同一活動同時有好幾個提醒點已到(排程延遲)時只送最近的一個，舊的直接記為已送。
 """
 from __future__ import annotations
@@ -29,6 +29,10 @@ STATE_PATH = ROOT / "work" / "thu_event_reminders.json"
 TAIWAN_TZ = timezone(timedelta(hours=8))
 REMINDERS = (("7d", timedelta(days=7)), ("1d", timedelta(days=1)),
              ("3h", timedelta(hours=3)), ("2h", timedelta(hours=2)), ("1h", timedelta(hours=1)))
+# A point is due from half a tick before it: with hourly ticks each point's one-hour window
+# [point - 30 min, point + 30 min) holds exactly one tick, so a reminder lands within ±30 min
+# instead of up to an hour late (a "1 hour before" could arrive minutes before the start).
+EARLY = timedelta(minutes=30)
 _WEEKDAY = "一二三四五六日"
 # 備註裡跟參加者有關的好處；其他注意事項(報名規則、聯絡人)不推
 _BENEFIT_RE = re.compile(r"餐|餐盒|點心|博雅|認證|時數|證書|獎勵|贈")
@@ -121,7 +125,7 @@ def due(events: list[dict], sent: dict, now: datetime) -> tuple[list[dict], dict
         if now >= start:
             continue
         done = set(sent.get(event["id"], []))
-        reached = [label for label, offset in REMINDERS if start - offset <= now]
+        reached = [label for label, offset in REMINDERS if start - offset - EARLY <= now]
         if reached and reached[-1] not in done:
             to_send.append(event)
         new_sent[event["id"]] = sorted(done | set(reached))

@@ -81,7 +81,9 @@ EVERY_TICK = {
 # from 2026-09-26 to 10-07 every tick came from the sparse, hours-late fallback cron and nothing
 # said so. Hour-level reminders (jobs/thu_events.py) silently degrade on such gaps, so a gap
 # longer than this is reported once a day until the trigger works.
-TICK_GAP_ALERT = timedelta(hours=2)
+# 3 h, not 2: Apps Script's hourly trigger is not on the hour, two ticks can be almost 2 h apart
+# without any being missed. Over 3 h means at least two ticks were lost.
+TICK_GAP_ALERT = timedelta(hours=3)
 SETUP_DOC = "docs/operations/CLOUD_SCHEDULER.md（一次性設定 2、切換步驟 7：installTrigger）"
 
 

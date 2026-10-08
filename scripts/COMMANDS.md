@@ -27,6 +27,7 @@
 
 ```
 python scripts/add_thu_event.py EMAIL.txt [EMAIL.txt ...] [--no-sync]
+python scripts/add_thu_event.py - [--no-sync]        (email text on stdin; nothing saved but the activity)
 python scripts/add_thu_event.py --list
 python scripts/add_thu_event.py --remove ID [--no-sync]
 ```
@@ -52,7 +53,7 @@ python check_links.py [--limit] [--days]   (由參數定義推導)
 ### `cloud_scheduler.py`
 
 ```
-python cloud_scheduler.py [--only] [--dry-run] [--now] [--mark-done-today]   (由參數定義推導)
+python cloud_scheduler.py [--only] [--dry-run] [--now] [--mark-done-today] [--force]   (由參數定義推導)
 ```
 
 ### `dev_knowledge_audit.py`

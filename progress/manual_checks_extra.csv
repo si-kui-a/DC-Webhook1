@@ -1,2 +1,3 @@
 key,question,current,url
 gas_hourly_trigger,用自己的 Google 帳號部署 ops/gas_hourly_trigger.gs 並執行 installTrigger（步驟：docs/operations/CLOUD_SCHEDULER.md 一次性設定 1–2、切換步驟 7）；完成後 Actions 會每小時出現 workflow_dispatch 執行,未部署：2026-09-26 至 10-07 沒有任何每小時觸發，只有每天 4 次、常延遲數小時的備援排程,https://script.google.com/
+gas_token_renewal,2027-10-08 前換新 GitHub token gas-hourly-trigger（同樣只限 DC-Webhook1、Actions 讀寫），貼進 Apps Script 專案「DC-Webhook1 hourly trigger」的指令碼屬性 GITHUB_TOKEN；過期後每小時觸發會停，排程間隔警告會推到 EDU bot,到期日 2027-10-08,https://github.com/settings/personal-access-tokens

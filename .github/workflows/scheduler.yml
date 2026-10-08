@@ -12,12 +12,13 @@ name: scheduler
 # API. GitHub's own schedule event is best-effort and since 2026-08-26 has run
 # 2-6 h late on this account (keyword-radar, content-health). The native cron below
 # is the safety net; the dispatcher's catch-up makes late/double ticks harmless.
-# Hourly since 2026-10-07 (was 4 a day): the external trigger had never been deployed,
-# so for 11 days these were the only ticks, and the repo is public (minutes are free).
-# A gap over 3 h now pushes an alert (cloud_scheduler.tick_gap_alert).
+# Every 3 h (2026-10-08): the Apps Script trigger (deployed 10-08) gives the hourly
+# ticks; hourly here too only doubled them. Its first gap of over 3 h pushes an alert
+# (cloud_scheduler.tick_gap_alert), so a dead trigger is noticed within one fallback.
+# On-time reminders do not depend on tick minutes: jobs/precise_send.py books send_at.yml.
 on:
   schedule:
-    - cron: '43 * * * *'  # odd minute avoids top-of-hour congestion
+    - cron: '43 */3 * * *'  # odd minute avoids top-of-hour congestion
   workflow_dispatch:
     inputs:
       only:
@@ -133,6 +134,8 @@ jobs:
           # registered campus activities (jobs/thu_events.py); a personal schedule, so it is a
           # secret set by scripts/add_thu_event.py, never a file in this public repo
           THU_EVENTS: ${{ secrets.THU_EVENTS }}
+          # jobs/precise_send.py dispatches send_at.yml (actions: write) and checks its runs
+          GH_TOKEN: ${{ github.token }}
         run: |
           args=()
           if [ -n "$ONLY" ]; then read -ra names <<< "$ONLY"; args+=(--only "${names[@]}"); fi

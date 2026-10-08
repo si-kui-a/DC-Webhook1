@@ -17,6 +17,7 @@
 | `pre_push_guard.py` | git push前的強制檢查，安裝於 .git/hooks/pre-push（見 scripts/install_hooks.py / install_hooks_full.py）。 |
 | `probe_cloud_reachability.py` | Probe which scrapers still work from a given network location. |
 | `publish_mechanical_change.py` | scripts/publish_mechanical_change.py — 把「機械性/低風險清單增減」類變更(CLAUDE.md 2026-08-07訂定、範圍限定ip與study-companion的PR自動merge例外)從「… |
+| `reminder_health.py` | One command to check the whole reminder pipeline (docs/operations/提醒推播流水線.md), read-only. |
 | `run_profile_checks.py` | Run profile-specific offline checks without AI or network access. |
 | `show_source_status.py` | 印出目前repo實際有哪些來源/頻道(2026-09-10新增)。 |
 | `verify_project_contract.py` | Offline contract check for repositories adopting the universal workflow. |
@@ -29,6 +30,7 @@
 python scripts/add_thu_event.py EMAIL.txt [EMAIL.txt ...] [--no-sync]
 python scripts/add_thu_event.py - [--no-sync]        (email text on stdin; nothing saved but the activity)
 python scripts/add_thu_event.py --list
+python scripts/add_thu_event.py --sync                (re-upload the list; reminder_health.py says when)
 python scripts/add_thu_event.py --remove ID [--no-sync]
 ```
 
@@ -106,6 +108,12 @@ python scripts/publish_mechanical_change.py \
 --commit-body "Why..." \
 --pr-title "chore(internship): 排除XX類" \
 --pr-body "PR說明..." \
+```
+
+### `reminder_health.py`
+
+```
+python scripts/reminder_health.py [--days-ahead 7]
 ```
 
 ### `run_profile_checks.py`

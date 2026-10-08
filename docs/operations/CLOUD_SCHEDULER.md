@@ -60,6 +60,10 @@ STATE_KEY=$(<取自本機 .env>) openssl enc -d -aes-256-cbc -pbkdf2 -iter 20000
 
 → `Enable-ScheduledTask` 重新啟用本機排程。
 
+## 提醒的預約送出、驗證與修復
+
+見 [提醒推播流水線.md](提醒推播流水線.md)。
+
 ## 手動操作
 
 - 立刻跑某個排程：Actions → scheduler → Run workflow → `only` 填排程名稱（名稱見 `cloud_scheduler.py` 的 `TASKS`）

@@ -43,8 +43,9 @@ TASK_TIMEOUT_SEC = 900  # same ceiling as ops/run_task.ps1
 # Hours mirror the local Windows tasks; 20:30 tasks run at 21 (after the 20:00 digests),
 # TwStockPortfolio 14:40 -> 15 since the dispatcher ticks once an hour.
 TASKS = {
-    "thu_calendar": (["main.py", "--source", "thu_calendar"], 6, None),
-    "thu_lixue": (["main.py", "--source", "thu_lixue"], 6, None),
+    # 05: the message is ready before its 06:00 send time (jobs/precise_send.py books it)
+    "thu_calendar": (["main.py", "--source", "thu_calendar"], 5, None),
+    "thu_lixue": (["main.py", "--source", "thu_lixue"], 5, None),
     "daily_recap": (["main.py", "--source", "daily_recap"], 7, None),
     "internship": (["main.py", "--internship"], 9, None),
     "twse_chunghwa": (["main.py", "--source", "twse_chunghwa"], 9, None),
@@ -74,6 +75,8 @@ TASKS = {
 EVERY_TICK = {
     "check_triggers": ["check_triggers.py"],
     "thu_events": ["main.py", "--source", "thu_events"],
+    # confirms the booked on-time sends ran; resends what failed (jobs/precise_send.py)
+    "precise_verify": ["main.py", "--source", "precise_verify"],
 }
 
 

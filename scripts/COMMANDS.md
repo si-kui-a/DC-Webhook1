@@ -78,19 +78,20 @@ python scripts/discord_admin.py rotate-webhook --env-key WEBHOOK_INSTITUTIONAL_T
 ### `install_hooks.py`
 
 ```
-python install_hooks.py   (不需參數)
+python scripts/install_hooks.py      在repo根目錄執行一次，安裝pre-commit與pre-push
 ```
 
 ### `pre_commit_guard.py`
 
 ```
-python pre_commit_guard.py   (不需參數)
+由 .git/hooks/pre-commit 自動呼叫（python scripts/install_hooks.py 安裝）
+python scripts/pre_commit_guard.py   手動對目前暫存區跑一次同樣的檢查
 ```
 
 ### `pre_push_guard.py`
 
 ```
-python pre_push_guard.py   (不需參數)
+由 .git/hooks/pre-push 自動呼叫（python scripts/install_hooks.py 安裝），git傳入remote名稱與URL
 ```
 
 ### `probe_cloud_reachability.py`

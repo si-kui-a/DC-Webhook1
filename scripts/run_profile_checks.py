@@ -10,8 +10,10 @@ AI_WORDS = re.compile(r"(faster-whisper|openai|anthropic|gemini|transformers|tor
 
 def tracked(root: Path) -> set[str]:
     try:
-        out = subprocess.check_output(["git", "-C", str(root), "ls-files"], text=True, encoding="utf-8", errors="replace", stderr=subprocess.DEVNULL, creationflags=_NO_WINDOW)
-        return {x.replace("\\", "/") for x in out.splitlines()}
+        # quotePath=false and -z: by default (as on CI) git quotes non-ASCII paths as "\346...",
+        # so every Chinese-named file would look untracked.
+        out = subprocess.check_output(["git", "-c", "core.quotePath=false", "-C", str(root), "ls-files", "-z"], text=True, encoding="utf-8", errors="replace", stderr=subprocess.DEVNULL, creationflags=_NO_WINDOW)
+        return {x.replace("\\", "/") for x in out.split("\0") if x}
     except (OSError, subprocess.CalledProcessError):
         return set()
 

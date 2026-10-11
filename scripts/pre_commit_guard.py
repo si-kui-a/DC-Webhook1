@@ -35,6 +35,10 @@ pre_commit_guard.py — git commit前的強制檢查，安裝於 .git/hooks/pre-
 
 以上4項若C:\\Projects或C:\\Projects\\_scripts在目前這台機器上不存在，
 一律靜默跳過(return True)，不讓commit在其他機器/環境上无端失敗。
+
+用法：
+  由 .git/hooks/pre-commit 自動呼叫（python scripts/install_hooks.py 安裝）
+  python scripts/pre_commit_guard.py   手動對目前暫存區跑一次同樣的檢查
 """
 import re
 import subprocess

@@ -25,6 +25,9 @@ stdin逐行給"<local ref> <local sha1> <remote ref> <remote sha1>"，
 
 以上檢查只在能拿到git資訊時執行；任何一步取不到資料就靜默跳過，不讓
 push在異常環境下無端失敗。
+
+用法：
+  由 .git/hooks/pre-push 自動呼叫（python scripts/install_hooks.py 安裝），git傳入remote名稱與URL
 """
 import subprocess
 import sys

@@ -4,6 +4,9 @@ install_hooks.py — 安裝 pre-commit + pre-push hook。clone後執行一次即
 2026-09-18新增pre-push：pre-commit接不到「force-push截斷歷史」「push全新
 分支時提醒預設分支/stacking」這兩類檢查(見pre_push_guard.py docstring)，
 需要pre-push這個時機點。安裝方式跟pre-commit一致，同一支腳本裝兩個hook。
+
+用法：
+  python scripts/install_hooks.py      在repo根目錄執行一次，安裝pre-commit與pre-push
 """
 import os
 import stat

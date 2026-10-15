@@ -45,7 +45,7 @@ def save(events: list[dict], now: datetime) -> list[dict]:
 
 def check_event(event: dict) -> list[str]:
     """A hand-written appointment: {"id", "name", "start": "YYYY-MM-DDTHH:MM", optional "end", "place",
-    "checkin", "bring": [...], "kind" (訊息標題，預設「活動」), "status", "url",
+    "checkin", "bring": [...], "notes": [...] (one 📌 line each), "kind" (訊息標題，預設「活動」), "status", "url",
     "reminders": [{"label", "at"}] (own reminder times; default: the activity offsets)}.
     No personal identifiers (name, phone, ID numbers) belong here."""
     problems = [f"missing {k}" for k in ("id", "name", "start") if not event.get(k)]

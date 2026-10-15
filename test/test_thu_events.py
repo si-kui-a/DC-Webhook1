@@ -155,6 +155,8 @@ class Appointment(unittest.TestCase):
         self.assertEqual(noted[-3:-1], ["📌 尾款 1,000 現場付", "📌 11/11 前不發"])
         late = dict(self.APPT, reminders=[{"label": "x", "at": "2026-10-21T16:30"}])
         self.assertTrue(add.check_event(late))
+        self.assertEqual(add.check_event(dict(self.APPT), at("2026-10-21T15:59")), [])
+        self.assertTrue(add.check_event(dict(self.APPT), at("2026-10-21T16:00")))
 
 
 class PreciseSend(unittest.TestCase):

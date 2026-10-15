@@ -43,7 +43,7 @@ def save(events: list[dict], now: datetime) -> list[dict]:
     return keep
 
 
-def check_event(event: dict) -> list[str]:
+def check_event(event: dict, now: datetime | None = None) -> list[str]:
     """A hand-written appointment: {"id", "name", "start": "YYYY-MM-DDTHH:MM", optional "end", "place",
     "checkin", "bring": [...], "notes": [...] (one 📌 line each), "kind" (訊息標題，預設「活動」), "status", "url",
     "reminders": [{"label", "at"}] (own reminder times; default: the activity offsets)}.
@@ -56,6 +56,10 @@ def check_event(event: dict) -> list[str]:
         start = datetime.fromisoformat(event["start"])
         problems += [f"reminder {r.get('label')} is not before the start" for r in event.get("reminders", [])
                      if datetime.fromisoformat(r["at"]) >= start]
+        # a started event is skipped by the scheduler, so it would be saved and never sent
+        # (2026-10-16: a pasted "10/15 13:00" that really meant 10/16)
+        if now and start <= now.replace(tzinfo=None):
+            problems.append(f"start {event['start']} has already passed; nothing would be sent")
     except (ValueError, KeyError, TypeError) as e:
         problems.append(f"bad time: {e}")
     return problems
@@ -94,7 +98,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.json:
         raw = sys.stdin.read() if args.json == "-" else Path(args.json).read_text(encoding="utf-8")
         event = json.loads(raw)
-        problems = check_event(event)
+        problems = check_event(event, now)
         if problems:
             print("FAIL json: " + "；".join(problems))
             return 1

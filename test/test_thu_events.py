@@ -150,6 +150,9 @@ class Appointment(unittest.TestCase):
         self.assertIn("🗓 2026-10-21（三） 16:00", msg)
         self.assertIn("🎒 攜帶：健保卡、掛號費 200 元", msg)
         self.assertEqual(msg[-1], "✅ 已預約｜https://example.com/")
+        noted = te.format_event(dict(appt, notes=["尾款 1,000 現場付", "11/11 前不發"]),
+                                at("2026-10-21T13:45")).splitlines()
+        self.assertEqual(noted[-3:-1], ["📌 尾款 1,000 現場付", "📌 11/11 前不發"])
         late = dict(self.APPT, reminders=[{"label": "x", "at": "2026-10-21T16:30"}])
         self.assertTrue(add.check_event(late))
 

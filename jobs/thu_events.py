@@ -123,6 +123,8 @@ def format_event(event: dict, now: datetime) -> str:
         lines.append(f"🎒 攜帶：{html.escape('、'.join(event['bring']))}")
     if event.get("benefits"):
         lines.append(f"🎁 {html.escape('；'.join(event['benefits']))}")
+    # hand-written appointments: payment, deadlines, things not to forget afterwards
+    lines += [f"📌 {html.escape(note)}" for note in event.get("notes", [])]
     lines.append(f"✅ {html.escape(event.get('status', '已報名'))}" + (f"｜{event['url']}" if event.get("url") else ""))
     return "\n".join(lines)
 

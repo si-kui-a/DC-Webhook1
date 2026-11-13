@@ -1,6 +1,6 @@
 requests>=2.31
 beautifulsoup4>=4.12
-python-dotenv>=1.0
+python-dotenv>=1.2.4
 cryptography>=42.0
 truststore>=0.9
 

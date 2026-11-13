@@ -510,3 +510,20 @@ if __name__ == "__main__":
         result = func(t, profile)
         emoji = "🚫" if result else "✅"
         print(f"{emoji} {rule_name:30s} | {t[:50]}")
+
+
+def passes_all_filters(title: str, profile: dict | None = None) -> bool:
+    """The one gate jobs/scholarship.py and scripts/source_hitrate.py share:
+    hard exclusions (keywords/residence/school/income/nationality/special
+    status/grade) plus relevance scoring."""
+    profile = profile if profile is not None else load_profile()
+    return not (
+        is_excluded_by_keywords(title, profile)
+        or is_excluded_by_residence(title, profile)
+        or is_excluded_by_school(title, profile)
+        or is_excluded_by_income(title, profile)
+        or is_excluded_by_nationality(title, profile)
+        or is_excluded_by_special_status(title, profile)
+        or is_excluded_by_grade(title, profile)
+        or not is_relevant(title)
+    )

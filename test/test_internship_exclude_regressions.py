@@ -66,7 +66,10 @@ class AuditScriptTests(unittest.TestCase):
             "audit_exclude_rules", os.path.join(ROOT, "scripts", "audit_exclude_rules.py"))
         mod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(mod)
-        self.assertEqual(mod.check_structure(mod._term_lists()) + mod.check_cases(), [])
+        lists = mod._term_lists()
+        self.assertEqual(mod.check_structure(lists) + mod.check_cases(), [])
+        # 救回規則的詞清單也要在稽核範圍內，否則重複或空白詞不會被抓到
+        self.assertIn("internship.exclude_rescue[0].unless_also", lists)
 
 
 if __name__ == "__main__":

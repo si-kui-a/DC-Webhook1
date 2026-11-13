@@ -36,7 +36,10 @@ def _load(name: str) -> dict:
 def _term_lists() -> dict[str, list[str]]:
     """名稱 → 純子字串排除詞清單（regex 類另列，不在此檢查冗餘）。"""
     out: dict[str, list[str]] = {}
-    out["internship.exclude_keywords"] = _load("internship_keywords.json").get("exclude_keywords", [])
+    kw = _load("internship_keywords.json")
+    out["internship.exclude_keywords"] = kw.get("exclude_keywords", [])
+    for i, rule in enumerate(kw.get("exclude_rescue", [])):
+        out[f"internship.exclude_rescue[{i}].unless_also"] = rule["unless_also"]
     thu = _load("thu_calendar_exclude.json")
     for k, v in thu.items():
         if not k.startswith("_") and isinstance(v, list):

@@ -1,15 +1,14 @@
 # Intel Pusher — 股票/獎學金/實習/行事曆情報推播機器人
 
-不用 n8n。純 Python + SQLite + Windows Task Scheduler。理由見企劃報告結論：n8n 的核心優勢（免寫 code 的視覺化維護）在「用 Claude 直接寫程式碼」的情境下不成立，只會多一層部署成本。
+不用 n8n。純 Python + SQLite + GitHub Actions 雲端排程。理由見企劃報告結論：n8n 的核心優勢（免寫 code 的視覺化維護）在「用 Claude 直接寫程式碼」的情境下不成立，只會多一層部署成本。
 
 ## 安裝
 
 ```bash
-cd intel-pusher
-python3 -m venv venv
-source venv/bin/activate
+python -m venv venv
+venv\Scripts\activate          # Windows；Linux/macOS 用 source venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env
+copy .env.example .env
 # 編輯 .env，依 .env.example 填入所需的 Discord Webhook URL(數量會隨頻道增減，不寫死)
 ```
 
@@ -35,8 +34,8 @@ python scripts/show_source_status.py
 
 輸出直接讀`jobs/*.py`裡的registry dict，永遠反映當下實際狀態，不需要
 手動維護——刻意不在這裡寫死總數，寫了就是重蹈被取代那份表格的覆轍。
-排程頻率/是否真的有排上Windows Task Scheduler不在這支腳本範圍內，查
-`Get-ScheduledTask -TaskName "IntelPusher-*"`。
+排程頻率/是否真的有排上雲端排程不在這支腳本範圍內，查
+`docs/operations/CLOUD_SCHEDULER.md` 與 `.github/workflows/`。
 
 ## 已知限制
 

@@ -1,4 +1,4 @@
-# intel-pusher — Project Context
+# 股票情報推播機器人 — 專案脈絡
 # 安裝位置: C:\Projects\10-501_Intel_Pusher_股票情報推播機器人\CLAUDE.md
 
 ## 類別: 金融/交易類 → 見 C:\Users\User\.claude\categories\financial-trading.md

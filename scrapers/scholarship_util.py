@@ -29,7 +29,7 @@ _DEFAULT_KEYWORDS = {"weights": {}, "threshold": 2}
 _DEFAULT_PROFILE = {"exclude_keywords": []}
 _DEFAULT_EXCLUDE = {
     "income_restricted": {
-        "title_keywords": {"zh": ["低收入戶", "中低收入戶", "清寒"]},
+        "title_keywords": {"zh": ["低收入戶", "清寒"]},
         "qualifying_profile_values": ["low", "lower-middle", "低收入", "中低收入"],
     },
     "special_status": {
@@ -41,7 +41,7 @@ _DEFAULT_EXCLUDE = {
     },
     "nationality_restricted": {
         "taiwan_aliases": {"zh": ["台灣", "臺灣", "中華民國"]},
-        "demonym_restricted": {"en": ["Greeks", "Hellenes"], "zh": ["工程師"]},
+        "demonym_restricted": {"en": ["Greeks", "Hellenes"], "zh": []},
     },
     "school_restricted": {
         "name_suffix": {"zh": ["大學", "學院", "哲學系", "美術系", "會計系"]},

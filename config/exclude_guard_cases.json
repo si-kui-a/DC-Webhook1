@@ -1,0 +1,31 @@
+{
+  "_comment": "排除規則的驗收案例（唯一來源）。改任何排除詞（internship_keywords.json 的 exclude_keywords、thu_calendar_exclude.json）時，在這裡加案例：must_exclude 是應被擋下的真實標題，must_keep 是字面帶到排除詞子字串、但不該被誤殺的標題（本專案題材是半導體／金融／科技）。test/test_internship_exclude_regressions.py 與 scripts/audit_exclude_rules.py 都讀這份檔，不在測試程式裡寫死案例。",
+  "internship": {
+    "must_exclude": [
+      "倉儲作業員招募(免經驗可,日班)",
+      "居家照顧服務員徵才,時薪面議",
+      "到府清潔人員招募,彈性排班",
+      "貨車駕駛徵才,甲式聯結車經驗尤佳"
+    ],
+    "must_keep": [
+      "自動駕駛系統工程師,負責感測器融合演算法開發",
+      "生產線自動化工程師,規劃設備產能提升方案",
+      "搬運機器人控制工程師,負責AMHS天車系統整合",
+      "保全系統整合工程師,負責門禁與監控系統建置",
+      "清潔製程設備工程師,負責晶圓廠製程設備維護"
+    ]
+  },
+  "thu_calendar": {
+    "must_exclude": [
+      "教務會議",
+      "新生訓練",
+      "休學申請截止日",
+      "研究生繳交論文截止日（114 學年度第 2 學期）"
+    ],
+    "must_keep": [
+      "加退選課程開始（大二以上及研究生）",
+      "期末考試週",
+      "停修申請截止日"
+    ]
+  }
+}

@@ -1,25 +1,21 @@
 """
-test_internship_exclude_regressions.py — config/internship_keywords.json
-的exclude_keywords「健檢」回歸測試(2026-09-02新增)。
+test_internship_exclude_regressions.py — 排除規則的驗收（案例唯一來源：
+config/exclude_guard_cases.json）。
 
-背景：2026-09-02新增基礎勞動力/居家照護清潔/駕駛相關三類排除詞時，初稿
-用了「駕駛」「搬運」「生產線」「保全」「清潔」等產業別裸詞，健檢時發現
-這些是產業別泛稱，會誤殺同樣命中子字串的科技職缺——這個專案本身涵蓋
-半導體供應鏈題材(見scrapers/tsmc.py, semi_supply_chain.py)，「自動駕駛
-系統工程師」「生產線自動化工程師」「搬運機器人工程師」「保全系統工程師」
-都是真實存在的職缺/實習頭銜，不該被行業別排除規則誤殺。改用職稱後綴
-(員/工/人員)或完整複合詞縮小比對範圍後修正。
+背景：2026-09-02 新增基礎勞動力／居家照護清潔／駕駛三類排除詞時，初稿用了
+「駕駛」「搬運」「生產線」「保全」「清潔」等產業別裸詞，會誤殺同樣帶到子字串的
+半導體／科技職缺（自動駕駛系統工程師等）。改用職稱後綴或完整複合詞後修正，
+並把判斷固化成案例。
 
-這支測試直接讀真實production config(不mock路徑)，目的是把這次健檢的
-判斷固化成可重跑的回歸測試——之後任何人再改exclude_keywords，跑這支
-測試就能立刻抓到「新增的裸詞是否誤殺技術職缺」，不用每次靠人工重新
-推演。用is_relevant_job_search()(台灣求職頻道的公開API)而非私有的
-_is_excluded_industry()，且測試字串刻意不含「實習」等關鍵字，這樣才是
-單純測到行業別排除這一層，不會被其他排除規則(關鍵字命中/科系/資歷)
-干擾判斷。
+之後改排除詞：先在 exclude_guard_cases.json 加 must_exclude／must_keep 案例，
+再改設定檔，跑本測試即知有沒有誤殺。案例不要寫回這個檔案。
+直接讀真實 production config，不 mock 路徑。
+用 is_relevant_job_search()（求職頻道公開 API）；案例標題刻意不含「實習」等
+關鍵字，才是單純測到行業別排除這一層。
 
-執行:python -m unittest discover -s test -v
+執行:python -m unittest test.test_internship_exclude_regressions -v
 """
+import json
 import os
 import sys
 import unittest
@@ -28,48 +24,49 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 
 from scrapers import internship_util as iu  # noqa: E402
+from scrapers import thu_calendar  # noqa: E402
+
+with open(os.path.join(ROOT, "config", "exclude_guard_cases.json"), encoding="utf-8") as _f:
+    CASES = json.load(_f)
 
 
-class ExcludeKeywordTruePositiveTests(unittest.TestCase):
-    """這些應該被行業別排除規則擋下(is_relevant_job_search回傳False)。"""
-
+class InternshipExcludeCases(unittest.TestCase):
     def setUp(self):
         iu.invalidate_cache()
 
-    def test_basic_labor_excluded(self):
-        self.assertFalse(iu.is_relevant_job_search("倉儲作業員招募(免經驗可,日班)"))
+    def test_must_exclude(self):
+        for title in CASES["internship"]["must_exclude"]:
+            self.assertFalse(iu.is_relevant_job_search(title), title)
 
-    def test_home_care_excluded(self):
-        self.assertFalse(iu.is_relevant_job_search("居家照顧服務員徵才,時薪面議"))
-
-    def test_cleaning_excluded(self):
-        self.assertFalse(iu.is_relevant_job_search("到府清潔人員招募,彈性排班"))
-
-    def test_driving_excluded(self):
-        self.assertFalse(iu.is_relevant_job_search("貨車駕駛徵才,甲式聯結車經驗尤佳"))
+    def test_must_keep(self):
+        for title in CASES["internship"]["must_keep"]:
+            self.assertTrue(iu.is_relevant_job_search(title), title)
 
 
-class ExcludeKeywordFalsePositiveGuardTests(unittest.TestCase):
-    """這些是科技/工程職缺,字面上帶到排除詞的子字串,不該被誤殺
-    (is_relevant_job_search應回傳True)。"""
-
+class ThuCalendarExcludeCases(unittest.TestCase):
     def setUp(self):
-        iu.invalidate_cache()
+        thu_calendar.invalidate_cache()
 
-    def test_autonomous_driving_engineer_not_excluded(self):
-        self.assertTrue(iu.is_relevant_job_search("自動駕駛系統工程師,負責感測器融合演算法開發"))
+    def test_must_exclude(self):
+        for title in CASES["thu_calendar"]["must_exclude"]:
+            self.assertFalse(thu_calendar.is_relevant_to_students(title), title)
 
-    def test_production_line_automation_engineer_not_excluded(self):
-        self.assertTrue(iu.is_relevant_job_search("生產線自動化工程師,規劃設備產能提升方案"))
+    def test_must_keep(self):
+        for title in CASES["thu_calendar"]["must_keep"]:
+            self.assertTrue(thu_calendar.is_relevant_to_students(title), title)
 
-    def test_material_handling_robot_engineer_not_excluded(self):
-        self.assertTrue(iu.is_relevant_job_search("搬運機器人控制工程師,負責AMHS天車系統整合"))
 
-    def test_security_system_engineer_not_excluded(self):
-        self.assertTrue(iu.is_relevant_job_search("保全系統整合工程師,負責門禁與監控系統建置"))
+class AuditScriptTests(unittest.TestCase):
+    """scripts/audit_exclude_rules.py 的結構與案例檢查必須通過（重複詞、冗餘詞、
+    案例失敗都會在這裡擋下），不必靠人記得手動跑。"""
 
-    def test_cleanroom_process_engineer_not_excluded(self):
-        self.assertTrue(iu.is_relevant_job_search("清潔製程設備工程師,負責晶圓廠製程設備維護"))
+    def test_audit_structure_and_cases_clean(self):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "audit_exclude_rules", os.path.join(ROOT, "scripts", "audit_exclude_rules.py"))
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        self.assertEqual(mod.check_structure(mod._term_lists()) + mod.check_cases(), [])
 
 
 if __name__ == "__main__":

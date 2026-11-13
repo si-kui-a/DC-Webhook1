@@ -89,6 +89,14 @@ def insert_item_if_new(source_id: str, title: str, summary: str, url: str, publi
     }
 
 
+def known_urls(source_id: str) -> set[str]:
+    """某來源已入庫的 URL，供爬蟲跳過重複的詳細頁請求。"""
+    conn = get_conn()
+    rows = conn.execute("SELECT url FROM item WHERE source_id = ?", (source_id,)).fetchall()
+    conn.close()
+    return {r[0] for r in rows}
+
+
 def mark_published(item_id: str):
     conn = get_conn()
     conn.execute("UPDATE item SET status='published' WHERE item_id=?", (item_id,))

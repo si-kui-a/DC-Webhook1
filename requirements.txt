@@ -10,7 +10,7 @@ truststore>=0.9
 # 停用詞表，不新增依賴。
 jieba>=0.42
 sumy>=0.12
-nltk>=3.9
+nltk>=3.10.4
 textrank4zh>=0.3
 # sumy LexRank 與 textrank4zh 的硬依賴，非直接呼叫但缺一不可
 numpy>=2.0

@@ -44,8 +44,12 @@ def parse_list(html: str) -> list[dict]:
         href = a.get("href", "")
         if not title or not href or href in seen:
             continue
+        url = href if href.startswith("http") else BASE_URL + href
+        # Only this site: a link to another host must never get a detail-page request.
+        if not url.startswith(BASE_URL + "/"):
+            continue
         seen.add(href)
-        items.append({"title": title, "url": href if href.startswith("http") else BASE_URL + href})
+        items.append({"title": title, "url": url})
     return items
 
 

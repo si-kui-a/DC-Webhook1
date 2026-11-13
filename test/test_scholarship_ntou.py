@@ -12,6 +12,7 @@ LIST = (
     '<a href="/p/406-1023-1,r1039.php?Lang=zh-tw">同一筆重複</a>'
     '<a href="https://stu.ntou.edu.tw/p/406-1023-2,r1039.php?Lang=zh-tw">政府獎學金</a>'
     '<a href="/p/403-1023-1042.php">不是公告</a>'
+    '<a href="https://evil.example/p/406-1023-9,r1039.php">外站連結</a>'
     '<a href="/p/406-1023-3,r1039.php"> </a>'
 )
 

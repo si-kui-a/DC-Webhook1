@@ -59,9 +59,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 55  # must finish before the next hourly tick
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: '3.12'  # 3.13+ enables VERIFY_X509_STRICT, which rejects TWCA gov certs (no SKI) on Linux; CI tests run on 3.12 too
           cache: pip
@@ -91,7 +91,7 @@ jobs:
       # restoring to the laptop, see docs/operations/CLOUD_SCHEDULER.md).
       - name: Restore state
         id: restore
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: state.enc
           key: ip-state-${{ github.run_id }}
@@ -154,7 +154,7 @@ jobs:
 
       - name: Save state
         if: always() && steps.encrypt.outcome == 'success'
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: state.enc
           key: ip-state-${{ github.run_id }}-${{ github.run_attempt }}
@@ -178,7 +178,7 @@ jobs:
       # Artifacts of a public repo can be downloaded by any signed-in GitHub user: encrypted only.
       - name: Daily state backup
         if: always() && steps.backup.outputs.due == 'true' && steps.encrypt.outcome == 'success'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: state-backup-${{ github.run_id }}
           path: state.enc

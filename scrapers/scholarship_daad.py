@@ -11,6 +11,8 @@ import re
 
 import requests
 
+from scrapers import scholarship_util
+
 logger = logging.getLogger("scrapers.scholarship_daad")
 
 SOURCE_ID = "scholarship.daad"
@@ -29,6 +31,24 @@ DETAIL_BASE_URL = (
 # 所以這裡不設 HEADERS，直接發送不帶 User-Agent 的請求。
 
 
+def is_eligible(record: dict, rule: dict) -> bool:
+    """DAAD 資料檔自帶結構化資格欄位：status（學歷身分）、origin（可申請國籍）、
+    subjectGrps（學科群），比標題字面判斷準。rule 為空（設定檔沒寫）就不過濾；
+    欄位缺漏視為不限（保守放行），避免資料格式變動時整批消失。"""
+    if not rule:
+        return True
+    status = record.get("status")
+    if status and rule["status_id"] not in status:
+        return False
+    origin = record.get("origin")
+    if origin and rule["origin_id"] not in origin:
+        return False
+    groups = record.get("subjectGrps")
+    if groups and not set(groups) & set(rule["subject_groups"]):
+        return False
+    return True
+
+
 def fetch() -> list[dict]:
     resp = requests.get(DATA_URL, timeout=15)
     resp.raise_for_status()
@@ -44,8 +64,11 @@ def fetch() -> list[dict]:
         logger.error("DAAD JSON 解析失敗: %s", e)
         return []
 
+    rule = scholarship_util.load_profile().get("daad_eligibility") or {}
     results = []
     for r in records:
+        if not is_eligible(r, rule):
+            continue
         title = (
             r.get("programmnameEn")
             or r.get("nameEn")

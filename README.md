@@ -37,6 +37,10 @@ python scripts/show_source_status.py
 排程頻率/是否真的有排上雲端排程不在這支腳本範圍內，查
 `docs/operations/CLOUD_SCHEDULER.md` 與 `.github/workflows/`。
 
+## 排除規則
+
+實習、獎學金、東海行事曆三套排除詞的位置、更新流程與驗證，統一見 `docs/排除規則.md`。改詞前先加 `config/exclude_guard_cases.json` 的案例，再跑 `python scripts/audit_exclude_rules.py`。
+
 ## 已知限制
 
 - **JS 動態渲染頁面**：`requests` 只拿到伺服器回傳的原始 HTML，不會執行 JavaScript。如果某來源的資料是靠前端 JS 抓 API 填進去的，`requests+BeautifulSoup` 會抓空，需改用 Playwright 渲染後再解析。

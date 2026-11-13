@@ -162,7 +162,17 @@ def _is_excluded_industry(text: str) -> bool:
     data = _load_keywords()
     excludes = data.get("exclude_keywords", [])
     text_lower = text.lower()
-    return any(kw.lower() in text_lower for kw in excludes)
+    hit = [kw for kw in excludes if kw.lower() in text_lower]
+    if not hit:
+        return False
+    # 救回規則(2026-11-13，依履歷方向)：被「設計／業務」這類寬詞擋下的標題，
+    # 若同時帶有使用者要的職類字眼(社群、文案、教學、行政助理…)，不排除。
+    # 只救該規則列出的詞；其餘排除詞(餐飲、會計、清潔…)不受影響。
+    for rule in data.get("exclude_rescue", []):
+        if all(kw in rule["terms"] for kw in hit) and any(
+                r.lower() in text_lower for r in rule["unless_also"]):
+            return False
+    return True
 
 
 def _is_excluded_by_profile(text: str) -> bool:

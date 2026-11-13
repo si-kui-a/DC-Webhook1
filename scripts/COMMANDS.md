@@ -6,6 +6,7 @@
 | 腳本 | 用途 |
 |---|---|
 | `add_thu_event.py` | Add a Tunghai campus-activity registration email to the reminder list (jobs/thu_events.py). |
+| `audit_exclude_rules.py` | scripts/audit_exclude_rules.py — 排除規則的稽核（唯一入口）。 |
 | `auto_commit_internship_keywords.py` | scripts/auto_commit_internship_keywords.py — 每月排程，只commit+push config/internship_keywords.json一個檔案，直接進main分支，不走featur… |
 | `check_encoding.py` | Fail if any tracked-area .py file is not valid UTF-8 (run by CI quality.yml). |
 | `check_links.py` | Check recently fetched item links without rewriting original URLs. |
@@ -33,6 +34,13 @@ python scripts/add_thu_event.py --list
 python scripts/add_thu_event.py --sync                (re-upload the list; reminder_health.py says when)
 python scripts/add_thu_event.py --json - [--no-sync]  (an appointment as JSON on stdin, own reminder times)
 python scripts/add_thu_event.py --remove ID [--no-sync]
+```
+
+### `audit_exclude_rules.py`
+
+```
+python scripts/audit_exclude_rules.py            # 報告；結構／案例有錯 exit 1
+python scripts/audit_exclude_rules.py --corpus   # 另列語料回放明細
 ```
 
 ### `auto_commit_internship_keywords.py`

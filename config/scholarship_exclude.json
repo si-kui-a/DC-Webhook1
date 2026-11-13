@@ -4,7 +4,7 @@
   "income_restricted": {
     "_comment": "低收入/清寒限定 — 使用者 profile.income_status 不符時排除",
     "title_keywords": {
-      "zh": ["低收入戶", "中低收入戶", "清寒"]
+      "zh": ["低收入戶", "清寒"]
     },
     "qualifying_profile_values": ["low", "lower-middle", "低收入", "中低收入"]
   },
@@ -19,7 +19,7 @@
     "taiwan_aliases": { "zh": ["台灣", "臺灣", "中華民國"] },
     "demonym_restricted": {
       "en": ["Greeks", "Hellenes"],
-      "zh": ["工程師"]
+      "zh": []
     }
   },
   "school_restricted": {

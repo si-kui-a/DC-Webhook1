@@ -28,11 +28,27 @@
   "grade_restricted": {
     "graduate_only": {
       "zh": ["博士生", "研究生", "碩士", "研究所"],
-      "en_regex": ["\\bphd\\b", "\\bmaster(?:'|\\u2019)?s?\\b", "\\bdoctoral\\b", "\\bpostdoc(?:toral)?\\b"],
-      "de_regex_case_sensitive": ["\\bPromotion\\b"]
+      "en_regex": ["\\bphd\\b", "\\bmaster(?:'|\\u2019)?s?\\b", "\\bdoctoral\\b", "\\bpostdoc(?:toral)?\\b",
+        "\\bpostgraduate\\b", "\\bPGT\\b", "\\bPGDE\\b", "\\bMBA\\b",
+        "\\bgraduate (?:school|business school|programmes?|scholarship|fellowship)",
+        "\\bfor graduates of\\b", "\\bearly career\\b", "\\bexperienced researchers?\\b", "\\bheisenberg\\b",
+        "\\bresearch (?:grants?|fellowships?)\\b"],
+      "de_regex_case_sensitive": ["\\bPromotion\\b"],
+      "_comment_override": "標題同時提到大學部（undergraduate/bachelor）就不算研究所限定，例如 Cusanuswerk: Undergraduate and Postgraduate Fellowships。",
+      "override_en_regex": ["\\bundergraduate", "\\bbachelor"]
     },
     "upperclass_only": { "zh": ["限大三", "限大四"] },
     "freshman_only": { "zh": ["新生入學", "新生獎勵", "優秀新生"] }
+  },
+  "region_restricted": {
+    "_comment": "標題字面就寫明限定特定國家／地區、且不含台灣的項目（只在 profile.country 為台灣時套用）。只收標題看得出來的詞，不靠猜測贊助單位的資格。",
+    "en_regex": ["\\bpalestinians?\\b", "\\bwest bank\\b", "\\byemenis?\\b", "\\bin-country\\b", "\\bin-region\\b",
+      "\\bsub-saharan\\b", "\\bcentral america\\b", "\\barab countries\\b", "\\bsur-place\\b",
+      "\\bcentral, eastern and southeastern europe\\b", "\\b(?:oman|tun[ei]sia)\\b",
+      "\\broyal thai\\b", "\\bfranco-thai\\b", "\\bhellenic\\b", "\\bhellenes\\b","\\bgreek\\b", "\\bgreece\\b",
+      "\\bcountry-related cooperation\\b", "\\bfrom (?:africa|latin america)\\b"],
+    "_comment_override": "標題寫明開放外國人就不算地區限定，例如 State of Greece Scholarships for Foreigners。",
+    "override_en_regex": ["\\bfor foreigners\\b"]
   },
   "residence_restricted": {}
 }

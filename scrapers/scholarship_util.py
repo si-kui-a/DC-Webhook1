@@ -344,6 +344,23 @@ def is_excluded_by_special_status(title: str, profile: dict | None = None) -> bo
     return False
 
 
+def is_excluded_by_region(title: str, profile: dict | None = None) -> bool:
+    """標題字面限定非台灣的國家／地區（只在使用者是台灣籍時套用）。"""
+    if not title or not profile or profile.get("country") not in ("Taiwan", "台灣", "臺灣"):
+        return False
+    region = _load_exclude().get("region_restricted", {})
+    if _matches_any_regex(title, region.get("override_en_regex", []), re.IGNORECASE):
+        return False
+    return _matches_any_regex(title, region.get("en_regex", []), re.IGNORECASE)
+
+
+def is_excluded_by_profile_regex(title: str, profile: dict | None = None) -> bool:
+    """profile.exclude_regex：科系／領域不符等需要單字邊界的排除詞。"""
+    if not title or not profile:
+        return False
+    return _matches_any_regex(title, profile.get("exclude_regex", []), re.IGNORECASE)
+
+
 def _is_graduate_student(profile: dict) -> bool:
     degree = str(profile.get("degree", "")).lower()
     return degree in ("master", "phd", "doctoral")
@@ -367,6 +384,8 @@ def is_excluded_by_grade(title: str, profile: dict | None = None) -> bool:
         or _matches_any_regex(title, graduate_only.get("en_regex", []), re.IGNORECASE)
         or _matches_any_regex(title, graduate_only.get("de_regex_case_sensitive", []), 0)
     )
+    if is_graduate_title and _matches_any_regex(title, graduate_only.get("override_en_regex", []), re.IGNORECASE):
+        is_graduate_title = False  # 同時開放大學部，不算研究所限定
     if not _is_graduate_student(profile) and is_graduate_title:
         return True
 
@@ -418,6 +437,10 @@ def filter_items(items: list[dict]) -> list[dict]:
         if is_excluded_by_special_status(raw_title, profile):
             continue
         if is_excluded_by_grade(raw_title, profile):
+            continue
+        if is_excluded_by_region(raw_title, profile):
+            continue
+        if is_excluded_by_profile_regex(raw_title, profile):
             continue
 
         survivors.append(item)

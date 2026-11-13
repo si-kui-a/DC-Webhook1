@@ -31,5 +31,12 @@
     "中國工程師學會-莫衡先生紀念獎學金",
     "全國台南一中校友總會-母校畢業校友現就讀各大學系所獎助學金"
   ],
+  "_comment_exclude_regex": "標題含這些「單字」就排除（用 \\b 單字邊界，子字串會誤殺，例如 STEM⊂system）：非社會學的科系／領域、旅費補助（多為研究者參加會議）、語言學校行銷型獎學金、運動專長。",
+  "exclude_regex": [
+    "\\bmedical\\b", "\\bmedicine\\b", "\\bdrug discovery\\b", "\\bagricultur", "\\bSTEM\\b", "\\bengineering\\b",
+    "\\barchitecture\\b", "\\bmusic\\b", "\\bperforming arts\\b", "\\bfine art\\b", "\\bchemistry\\b",
+    "\\bphotonics\\b", "\\blife sciences\\b", "\\bbiodiversity\\b", "^(?!.*\\bfreemover\\b).*\\btravel grants?\\b",
+    "\\beurocentres\\b", "\\bESL\\b", "\\bsprachaufenthalte?\\b", "\\bsports? scholarship\\b"
+  ],
   "ai_fallback_score_range": [0.35, 0.65]
 }

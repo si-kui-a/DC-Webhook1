@@ -1,0 +1,39 @@
+{
+  "_comment": "獎學金排除規則的驗收案例。改 scholarship_exclude.json 或 scholarship_profile.json 的排除詞前先在這裡加案例：must_exclude 是應被擋下的真實標題（資料庫 2026-11-13 的實際項目），must_keep 是字面帶到排除詞、但對「大二台灣籍社會學系學生」仍該通過的標題（含 STEM⊂system 這類子字串陷阱）。test/test_scholarship_exclude_regressions.py 讀這份檔。",
+  "must_exclude": [
+    "ALBA Graduate Business School - ALBA Scholarships for International Students",
+    "University of Bradford 60th Anniversary Scholarship fuer internationale PGT-Studierende",
+    "Athens University of Economics & Business - MBA International Scholarships",
+    "Alexander von Humboldt Foundation: Humboldt Research Fellowship for Experienced Researchers",
+    "ERP Study Scholarships for Graduates of Economics and Business Administration",
+    "Government Scholarships Programme Oman",
+    "In-Country Scholarships for Postgraduate Studies for Palestinians in the Palestinian Territories (West Bank)",
+    "In-Region Scholarships for Postgraduate Studies for Yemenis in Jordan",
+    "Heinrich Böll Foundation: Sur-Place Scholarship Programme",
+    "Union of Greek Shipowners - Union of Greek Shipowners Scholarships",
+    "Onassis Foundation - Scholarships for Hellenes",
+    "Office of the Civil Service Commission - Royal Thai Government Scholarship / OCSC Scholarship Programme",
+    "Bayer Foundation: Fellowship for Medical Sciences",
+    "Study scholarships for STEM disciplines",
+    "Study Scholarships - Postgraduate Studies in the Field of Music",
+    "Eurocentres - Be different! Scholarship",
+    "ESL Sprachaufenthalte – Stipendium für Durchschnittliche",
+    "Paolo Foundation - Travel Grant",
+    "University of Nottingham - Deng Yaping Sports Scholarship"
+  ],
+  "must_keep": [
+    "Cusanuswerk: Undergraduate and Postgraduate Fellowships",
+    "University of Aberdeen - Aberdeen Global Scholarship - Undergraduate and PGDE",
+    "Evangelisches Studienwerk: Scholarship for Students",
+    "Friedrich Ebert Foundation: Scholarship for International Students",
+    "Heinrich Böll Foundation: Student Scholarship",
+    "Federal Ministry of Education and Research: Deutschlandstipendium",
+    "European Union: Erasmus+ Mobility Programme for Higher Education Students",
+    "Taiwan Summer Institute Programme",
+    "University Summer Courses offered in Germany for Foreign Students and Graduates",
+    "State of Greece - State of Greece Scholarships for Foreigners",
+    "University of Lapland - Freemover Scholarship:Travel Grant",
+    "Systems Thinking Student Scholarship",
+    "東海大學外國學生獎學金"
+  ]
+}

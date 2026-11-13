@@ -18,6 +18,8 @@
   "is_refugee": false,
   "is_disability_or_illness": false,
   "is_new_resident": false,
+  "_comment_daad": "DAAD 資料檔的結構化資格代碼（status.js／origin.js／subjectgroups.js）：status 1=大學部學生、origin 103=台灣、學科群 A=語言文化 B=法商社會。",
+  "daad_eligibility": {"status_id": 1, "origin_id": 103, "subject_groups": ["A", "B"]},
   "exclude_keywords": [
     "限理工",
     "限醫學",

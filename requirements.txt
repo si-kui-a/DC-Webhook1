@@ -14,7 +14,7 @@ nltk>=3.9
 textrank4zh>=0.3
 # sumy LexRank 與 textrank4zh 的硬依賴，非直接呼叫但缺一不可
 numpy>=2.0
-scipy>=1.14
+scipy>=1.18.1
 networkx>=3.0
 
 # ai_insight.py（fed/tsmc中文翻譯+利多利空判斷、頻道彙整、大總結）純用

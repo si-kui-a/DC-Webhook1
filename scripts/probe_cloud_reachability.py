@@ -30,6 +30,7 @@ TARGETS = [
     ("scrapers.scholarship_moe", "fetch"),
     ("scrapers.scholarship_thu", "fetch"),
     ("scrapers.scholarship_efg", "fetch"),
+    ("scrapers.scholarship_ntou", "fetch"),
     ("scrapers.scholarship_daad", "fetch"),
     ("scrapers.thu_calendar", "fetch_raw_events"),
     ("scrapers.thu_lixue", "fetch_announcements"),

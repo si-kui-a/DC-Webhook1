@@ -7,7 +7,7 @@ import db
 from push_webhook import build_embed, send_webhook
 from scrapers.contracts import validate_items
 from scrapers.health import record as record_source_health
-from scrapers import scholarship_daad, scholarship_moe, scholarship_thu, scholarship_efg
+from scrapers import scholarship_daad, scholarship_moe, scholarship_thu, scholarship_efg, scholarship_ntou
 from scrapers import scholarship_util
 from jobs.paths import SOURCE_HEALTH_PATH
 
@@ -19,6 +19,7 @@ SCHOLARSHIP_REGISTRY = {
     "scholarship_moe": (scholarship_moe.fetch, scholarship_moe.SOURCE_NAME, scholarship_moe.SOURCE_ID),
     "scholarship_thu": (scholarship_thu.fetch, scholarship_thu.SOURCE_NAME, scholarship_thu.SOURCE_ID),
     "scholarship_efg": (scholarship_efg.fetch, scholarship_efg.SOURCE_NAME, scholarship_efg.SOURCE_ID),
+    "scholarship_ntou": (scholarship_ntou.fetch, scholarship_ntou.SOURCE_NAME, scholarship_ntou.SOURCE_ID),
 }
 SCHOLARSHIP_WEBHOOK_ENV = "WEBHOOK_SCHOLARSHIP"
 # 首次執行安全閘門：每來源最多推播 N 筆（避免洗版）

@@ -5,6 +5,9 @@ on:
   push:
     branches: [main]
 
+permissions:
+  contents: read
+
 jobs:
   python-quality:
     runs-on: ubuntu-latest
@@ -14,10 +17,10 @@ jobs:
       # 目前checkout那個commit的index，兩者checkout後必然相同，這個檢查
       # 對任何PR的實際改動都是恆真通過，從沒真的擋過任何一次whitespace
       # 問題。要完整歷史才能對真正的base/前一個commit做diff。
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: '3.12'
       - name: Install dependencies
@@ -33,9 +36,11 @@ jobs:
           pip install pytest
           python -m pytest test/ tests/ -v
       - name: Patch whitespace
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
-          if [ -n "${{ github.event.pull_request.base.sha }}" ]; then
-            BASE="${{ github.event.pull_request.base.sha }}"
+          if [ -n "$PR_BASE_SHA" ]; then
+            BASE="$PR_BASE_SHA"
           elif git rev-parse HEAD~1 >/dev/null 2>&1; then
             BASE="HEAD~1"
           else

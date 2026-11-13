@@ -2,7 +2,7 @@ requests>=2.31
 beautifulsoup4>=4.12
 python-dotenv>=1.0
 cryptography>=42.0
-truststore>=0.9
+truststore>=0.10.5
 
 # 本地摘要功能（抽取式演算法，非LLM，無雲端API）：
 # cbc（中文）用 textrank4zh；fed/tsmc（英文）用 sumy LexRank；

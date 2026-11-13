@@ -21,6 +21,7 @@
 | `reminder_health.py` | One command to check the whole reminder pipeline (docs/operations/提醒推播流水線.md), read-only. |
 | `run_profile_checks.py` | Run profile-specific offline checks without AI or network access. |
 | `show_source_status.py` | 印出目前repo實際有哪些來源/頻道(2026-09-10新增)。 |
+| `source_hitrate.py` | scripts/source_hitrate.py — 來源命中率（唯一入口；任何「命中率」都用本腳本輸出，不手算）。 |
 | `verify_project_contract.py` | Offline contract check for repositories adopting the universal workflow. |
 
 ## 呼叫方式
@@ -136,6 +137,18 @@ python run_profile_checks.py [--root] [--profile] [--ai-required] [--json]   (�
 
 ```
 python show_source_status.py   (不需參數)
+```
+
+### `source_hitrate.py`
+
+```
+python scripts/source_hitrate.py                       # 讀 data.db，列兩個類別
+python scripts/source_hitrate.py --category internship
+python scripts/source_hitrate.py --trial items.json --category scholarship [--gate]
+試跑模式：items.json 為 [{"title":..,"_filter_text":..(可選)}, ...]，
+用正式的過濾管線算候選來源的命中率；不低於「同類別現有來源中位數」
+才 exit 0（否則 exit 1）。--gate 表示像 RICH 那樣跳過關鍵字計分
+（internship 專用）。
 ```
 
 ### `verify_project_contract.py`

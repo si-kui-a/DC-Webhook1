@@ -144,15 +144,7 @@ def run_scholarship():
 
             # 完整過濾管線：硬性排除（戶籍地/學校/收入/國籍/特殊身份/年級）
             # + 關鍵字相關性計分。未通過的項目標記為歷史存檔，不推播。
-            profile = scholarship_util.load_profile()
-            if (scholarship_util.is_excluded_by_keywords(raw["title"], profile)
-                or scholarship_util.is_excluded_by_residence(raw["title"], profile)
-                or scholarship_util.is_excluded_by_school(raw["title"], profile)
-                or scholarship_util.is_excluded_by_income(raw["title"], profile)
-                or scholarship_util.is_excluded_by_nationality(raw["title"], profile)
-                or scholarship_util.is_excluded_by_special_status(raw["title"], profile)
-                or scholarship_util.is_excluded_by_grade(raw["title"], profile)
-                or not scholarship_util.is_relevant(raw["title"])):
+            if not scholarship_util.passes_all_filters(raw["title"]):
                 db.mark_seeded_historical(item["item_id"])
                 logger.debug("[%s] 過濾排除，跳過: %s", key, raw["title"][:60])
                 continue

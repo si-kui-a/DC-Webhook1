@@ -23,5 +23,5 @@ networkx>=3.0
 # 同樣純urllib，不新增依賴；build_trade_decision刻意不接此備援。
 
 # resume_matcher.py（履歷配對/AI修改建議）：解析使用者上傳的履歷檔案
-pypdf>=6.0
+pypdf>=7.0.1
 python-docx>=1.2

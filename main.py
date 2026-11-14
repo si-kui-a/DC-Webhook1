@@ -40,6 +40,7 @@ from jobs.paths import WORK_DIR
 from jobs.engine import SOURCE_REGISTRY, run_source
 from jobs.scholarship import run_scholarship
 from jobs.internship import run_internship
+from jobs.remote_zh import run_remote_zh
 from jobs.digest import DIGEST_CHANNELS, run_digest_channel
 from jobs.daily_recap import run_daily_recap
 from jobs.portfolio import PORTFOLIO_CHANNELS, run_portfolio_channel
@@ -75,6 +76,8 @@ def main():
                         help="批次執行所有獎學金來源")
     parser.add_argument("--internship", action="store_true",
                         help="批次執行所有台灣實習來源")
+    parser.add_argument("--remote-zh", action="store_true",
+                        help="批次執行中文母語遠端職缺來源")
     parser.add_argument("--send-at", nargs=3, metavar=("JOB", "KEY", "AT"),
                         help="(.github/workflows/send_at.yml) 睡到 AT 再送出 JOB 的提醒")
     args = parser.parse_args()
@@ -83,12 +86,12 @@ def main():
         from jobs.precise_send import run_send_at
         return 0 if run_send_at(*args.send_at) else 1
 
-    flags = (args.source, args.scholarship, args.internship)
+    flags = (args.source, args.scholarship, args.internship, args.remote_zh)
     if not any(flags):
         parser.print_help()
         sys.exit(1)
     if sum(bool(x) for x in flags) > 1:
-        parser.error("--source / --scholarship / --internship 三者互斥，一次只能選一個")
+        parser.error("--source / --scholarship / --internship / --remote-zh 互斥，一次只能選一個")
 
     db.init_db()
 
@@ -96,6 +99,8 @@ def main():
         run_scholarship()
     elif args.internship:
         run_internship()
+    elif args.remote_zh:
+        return 1 if run_remote_zh() is False else 0
     # Single-channel runs (what the cloud scheduler uses) report an explicit False as
     # exit 1, so the dispatcher retries on a later tick instead of recording success.
     elif args.source in DIGEST_CHANNELS:

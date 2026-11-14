@@ -13,7 +13,12 @@
     "overseas_student": { "zh": ["僑生"] },
     "refugee": { "en": ["refugee"] },
     "disability_illness": { "zh": ["罕見疾病", "視障", "癌症", "身心障礙", "身障", "重大傷病", "特殊疾病"] },
-    "new_resident": { "zh": ["新住民"] }
+    "new_resident": { "zh": ["新住民"] },
+    "other_identity": {
+      "_comment": "使用者不具任何特殊身分（2026-11-14 決定）：標題限定這些身分就排除，不看 profile。",
+      "zh": ["軍眷", "榮眷", "榮民", "遺族", "烈士", "軍公教", "單親", "隔代教養", "特殊境遇",
+        "農民子女", "漁民子女", "勞工子女", "外籍配偶", "外配子女", "弱勢家庭", "身心障礙者子女"]
+    }
   },
   "nationality_restricted": {
     "taiwan_aliases": { "zh": ["台灣", "臺灣", "中華民國"] },
@@ -50,5 +55,7 @@
     "_comment_override": "標題寫明開放外國人就不算地區限定，例如 State of Greece Scholarships for Foreigners。",
     "override_en_regex": ["\\bfor foreigners\\b"]
   },
-  "residence_restricted": {}
+  "residence_restricted": {
+    "_comment": "居住/設籍/戶籍/市民限定且不是 profile.residence_city 的縣市就排除（2026-11-14 決定）。cities 不填則用程式內建 22 縣市。"
+  }
 }

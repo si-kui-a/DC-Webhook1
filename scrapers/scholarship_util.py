@@ -63,6 +63,18 @@ _DEFAULT_EXCLUDE = {
     "residence_restricted": {},
 }
 
+# 台灣 22 縣市（不含尾綴；台/臺統一寫「臺」，比對前已正規化）
+_DEFAULT_CITIES = [
+    "臺北", "台北", "新北", "桃園", "臺中", "台中", "臺南", "台南", "高雄", "基隆", "新竹", "嘉義",
+    "宜蘭", "苗栗", "彰化", "南投", "雲林", "屏東", "花蓮", "臺東", "台東", "澎湖", "金門", "連江",
+]
+
+# 非原住民/僑生等既有分類的特殊身分：使用者皆不具備，標題限定即排除
+_DEFAULT_OTHER_IDENTITY = [
+    "軍眷", "榮眷", "榮民", "遺族", "烈士", "軍公教", "單親", "隔代教養", "特殊境遇",
+    "農民子女", "漁民子女", "勞工子女", "外籍配偶", "外配子女", "弱勢家庭", "身心障礙者子女",
+]
+
 
 # ============================================================
 # 載入設定
@@ -204,10 +216,21 @@ def is_excluded_by_residence(title: str, profile: dict | None = None) -> bool:
     user_city = profile.get("residence_city")
     if not user_city:
         return False
-    m = re.search(r"限([一-龥]{2,3}[市縣])(?:設籍|戶籍)", title)
-    if not m:
-        return False
-    return _normalize_city_name(m.group(1)) != _normalize_city_name(user_city)
+    user_norm = _normalize_city_name(user_city)
+    # 標題只要把居住/設籍/戶籍/市民資格綁在「台中以外」的縣市就排除；
+    # 用固定縣市清單而非 [一-龥]{2,3}，避免把校名、機構名當縣市。
+    cities = _load_exclude().get("residence_restricted", {}).get("cities") or _DEFAULT_CITIES
+    city_alt = "|".join(sorted(cities, key=len, reverse=True))
+    pattern = (
+        rf"(?:限|僅限|需|須|應)?(?:設籍|戶籍|居住|住)?(?:於|在)?({city_alt})[市縣]?"
+        rf"(?:設籍|戶籍|籍|市民|縣民|居民|鄉親|子弟|子女|青年|在地|居住)"
+        rf"|(?:設籍|戶籍|居住|住)(?:於|在)?({city_alt})[市縣]?"
+    )
+    for m in re.finditer(pattern, title):
+        city = m.group(1) or m.group(2)
+        if _normalize_city_name(city) != user_norm:
+            return True
+    return False
 
 
 def is_excluded_by_school(title: str, profile: dict | None = None) -> bool:
@@ -339,6 +362,10 @@ def is_excluded_by_special_status(title: str, profile: dict | None = None) -> bo
     if not profile_defaults["is_disability_or_illness"] and _matches_any_plain(title, disability_terms):
         return True
     if not profile_defaults["is_new_resident"] and _matches_any_plain(title, new_resident_terms):
+        return True
+    # 軍眷/榮眷等其餘身分：使用者皆不具備，沒有對應 profile 旗標，命中即排除
+    other_terms = ss.get("other_identity", {}).get("zh", _DEFAULT_OTHER_IDENTITY)
+    if _matches_any_plain(title, other_terms):
         return True
 
     return False

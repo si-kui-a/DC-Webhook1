@@ -219,7 +219,7 @@ def run_internship():
                 db.mark_seeded_historical(item["item_id"])
                 continue
 
-            if not internship_util.is_relevant_job_search(filter_text):
+            if not internship_util.is_relevant_remote_job_search(filter_text):
                 db.mark_seeded_historical(item["item_id"])
                 continue
 

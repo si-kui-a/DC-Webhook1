@@ -59,7 +59,8 @@ def invalidate_cache():
     scholarship_util.invalidate_cache()  # 學校/年級/國籍/身份別排除共用同一份profile
 
 
-DEFAULT_KEYWORD_WEIGHT = 2  # 「關鍵字：<詞>」沒給權重時的預設值，比照threshold(2)/實習二字既有權重
+_REMOTE_WEIGHT_KEY = "完全遠端|全遠端|遠端工作|居家上班"  # 同 internship_keywords.json regex_weights 的鍵
+DEFAULT_KEYWORD_WEIGHT = 2 # 「關鍵字：<詞>」沒給權重時的預設值，比照threshold(2)/實習二字既有權重
 
 
 def _read_raw_config() -> dict:
@@ -274,7 +275,9 @@ def is_relevant_job_search(text: str) -> bool:
     不算功能缺陷。"""
     if not text:
         return False
-    if get_matched_keywords(text):
+    # 遠端加分詞是實習頻道的計分項，不是「實習字眼」；不排除掉它，
+    # 全遠端職缺會被誤判成實習而永遠進不了求職頻道(2026-11-14)。
+    if [k for k in get_matched_keywords(text) if k != _REMOTE_WEIGHT_KEY]:
         return False
     if _is_excluded_industry(text):
         return False
@@ -283,6 +286,22 @@ def is_relevant_job_search(text: str) -> bool:
     if is_excluded_by_major(text):
         return False
     return True
+
+
+def is_fully_remote(text: str) -> bool:
+    """標題/內容明寫全遠端、且沒有部分/混合遠端字樣(2026-11-14求職頻道專屬)。"""
+    if not text:
+        return False
+    data = _load_keywords()
+    for pat in data.get("remote_job_search_negative", []):
+        if re.search(pat, text, re.IGNORECASE):
+            return False
+    return any(re.search(p, text, re.IGNORECASE) for p in data.get("remote_job_search_regex", []))
+
+
+def is_relevant_remote_job_search(text: str) -> bool:
+    """求職頻道的實際入口：全遠端 + 既有的非實習/行業/身分/科系排除。"""
+    return is_fully_remote(text) and is_relevant_job_search(text)
 
 
 def passes_profile_filters(text: str) -> bool:

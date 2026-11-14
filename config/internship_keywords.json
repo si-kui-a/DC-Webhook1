@@ -82,6 +82,9 @@
     "完全遠端|全遠端|遠端工作|居家上班": 2
   },
   "_comment_salary": "高薪加分(使用者確認2026-07-31)：薪資是MOL資料的數字欄位(NT_L/NT_U),不是文字關鍵字,故score_title()另外收salary參數比對,threshold先抓月薪35000元(高於2026基本工資,屬於明顯優於一般實習水準的門檻,可自行調整此數字)。",
+  "_comment_remote_job_search": "2026-11-14使用者決定：求職頻道(非實習)只收「全遠端」職缺(求職條件：台中、兼職/實習/可完全遠端的非全職)。標題或內容要命中remote_job_search_regex，且不命中remote_job_search_negative(部分/混合/彈性遠端不算全遠端)。只影響求職頻道，實習頻道不受影響。",
+  "remote_job_search_regex": ["完全遠端", "全遠端", "全程遠端", "100%遠端", "遠端工作", "遠距工作", "在家工作", "居家上班", "\\bfully[- ]remote\\b", "\\b100%\\s*remote\\b", "\\bwork from home\\b"],
+  "remote_job_search_negative": ["部分遠端", "半遠端", "混合遠端", "混合辦公", "彈性遠端", "可遠端", "每週.{0,6}天.{0,4}遠端", "\\bhybrid\\b"],
   "high_salary_threshold": 35000,
   "high_salary_bonus": 2,
   "threshold": 2

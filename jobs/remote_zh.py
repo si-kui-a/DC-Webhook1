@@ -11,6 +11,7 @@ import db
 from scrapers.contracts import validate_items
 from scrapers.health import record as record_source_health
 from scrapers import remote_zh_himalayas
+from scrapers import remote_zh_arbeitnow
 from jobs.internship import _push_internship_style_batch
 from jobs.paths import SOURCE_HEALTH_PATH
 
@@ -21,6 +22,9 @@ REMOTE_ZH_FIRST_RUN_CAP = 15
 REMOTE_ZH_SOURCES = {
     "remote_zh_himalayas": (
         remote_zh_himalayas.fetch, remote_zh_himalayas.SOURCE_NAME, remote_zh_himalayas.SOURCE_ID,
+    ),
+    "remote_zh_arbeitnow": (
+        remote_zh_arbeitnow.fetch, remote_zh_arbeitnow.SOURCE_NAME, remote_zh_arbeitnow.SOURCE_ID,
     ),
 }
 

@@ -45,6 +45,10 @@
 3. 上傳：`gh release create state-seed state-seed.enc --prerelease --title state-seed --notes "encrypted initial state"`
    （**不能用 draft**：workflow 的 token 只有讀取權限，看不到 draft release。公開 repo 的 release 是公開的，所以一定要加密）
 4. 設定 secret：`gh secret set DOTENV < .env`（不要把內容印出來）
+   **上傳 DOTENV 前先確認 `STATE_KEY` 跟雲端快取用的是同一把**：secret 只能寫入、不能讀回，覆蓋後舊金鑰就找不回來，`ip-state-*` 快取會永遠解不開（2026-11-14 事故：本機 `.env` 的金鑰與雲端不同，整份覆蓋後 `Decrypt state` 全壞，只能用 9/26 的舊 `data.db` 重建 seed）。
+   - 已有 `ip-state-*` 快取（`gh cache list --key ip-state-`）時，不要整份覆蓋 DOTENV；只改單一行就要先把雲端與本機的 `STATE_KEY` 指紋比對一致（只比雜湊前 8 碼，不印金鑰）。
+   - 本機 `.env` 若是 CRLF，雲端取到的金鑰尾端會多一個 `\r`（workflow 的 `sed` 不會去掉）。本機打包 seed 時要用同一組原始位元組當金鑰；Git Bash 的 `$(...)` 會吞掉 `\r`，改用 Python 把金鑰以原始位元組放進環境變數再呼叫 `openssl`。
+   - 本機 `data.db` 只在切換當天是最新的；雲端上線後它不會更新，不能當作日後重建 seed 的來源，要重建前先用 `gh cache list` 確認舊快取是否還在並設法保住金鑰。
 5. 手動觸發一次並勾 `mark_done_today`：把當天本機已跑過的排程記成完成，避免重複推播
 6. 確認 run 成功、cache 出現 `ip-state-*` 之後，刪掉 `state-seed` release
 7. 在 Apps Script 編輯器執行一次 `installTrigger`（會要求授權；建立觸發器後立刻 `tick()` 一次驗證 token）。

@@ -48,6 +48,7 @@ TASKS = {
     "thu_lixue": (["main.py", "--source", "thu_lixue"], 5, None),
     "daily_recap": (["main.py", "--source", "daily_recap"], 7, None),
     "internship": (["main.py", "--internship"], 9, None),
+    "remote_zh": (["main.py", "--remote-zh"], 9, None),
     "twse_chunghwa": (["main.py", "--source", "twse_chunghwa"], 9, None),
     "twse_tsmc": (["main.py", "--source", "twse_tsmc"], 9, None),
     "fed": (["main.py", "--source", "fed"], 9, WEEKDAYS),

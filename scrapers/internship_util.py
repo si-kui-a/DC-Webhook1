@@ -300,8 +300,12 @@ def is_fully_remote(text: str) -> bool:
 
 
 def is_relevant_remote_job_search(text: str) -> bool:
-    """求職頻道的實際入口：全遠端 + 既有的非實習/行業/身分/科系排除。"""
-    return is_fully_remote(text) and is_relevant_job_search(text)
+    """求職頻道的實際入口：原本的非實習職缺規則，再加上「全遠端」類別
+    (2026-11-14使用者更正：是加類別，不是限縮)。全遠端職缺即使帶實習字樣
+    (實習頻道沒收的)也收，但行業/身分/科系排除仍然套用。"""
+    if is_relevant_job_search(text):
+        return True
+    return is_fully_remote(text) and passes_profile_filters(text)
 
 
 def passes_profile_filters(text: str) -> bool:
